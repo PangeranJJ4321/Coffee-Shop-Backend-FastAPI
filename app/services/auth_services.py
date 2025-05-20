@@ -1,30 +1,44 @@
 """
 Authentication service handling all authentication-related operations
 """
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, Tuple
 from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.utils.security import verify_password, get_password_hash, create_access_token, decode_jwt_token
-from app.models.user import UserModel, RoleModel, Role
+from app.utils.security import verify_password, get_password_hash, create_access_token, decode_jwt_token, create_verification_token
+from app.models.user import UserModel, Role
 from app.schemas.auth_schema import UserLogin, TokenResponse, UserRegister
+from app.repositories.user_repository import UserRepository
+from app.repositories.role_repository import RoleRepository
+from app.services.email import send_verification_email
 
 class AuthService:
     def __init__(self, db: Session = Depends(get_db)):
         self.db = db
+        self.user_repository = UserRepository(db)
+        self.role_repository = RoleRepository(db)
     
     def authenticate_user(self, login_data: UserLogin) -> Optional[UserModel]:
         """Authenticate user with email and password"""
-        user = self.db.query(UserModel).filter(UserModel.email == login_data.email).first()
+        user = self.user_repository.get_by_email(login_data.email)
         
         if not user:
             return None
             
         if not verify_password(login_data.password, user.password_hash):
             return None
+        
+        # Check if user is verified
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Email not verified. Please check your inbox for the verification email."
+            )
             
         return user
     
@@ -43,33 +57,47 @@ class AuthService:
             token_type="bearer"
         )
     
-    def register_user(self, user_data: UserRegister) -> UserModel:
-        """Register a new user"""
+    def register_user(self, user_data: UserRegister) -> Tuple[UserModel, str]:
+        """Register a new user and generate verification token"""
         try:
-            # Get the user role (default to USER)
-            user_role = self.db.query(RoleModel).filter(RoleModel.role == Role.USER).first()
-            if not user_role:
-                # Create role if it doesn't exist
-                user_role = RoleModel(role=Role.USER)
-                self.db.add(user_role)
-                self.db.commit()
-                self.db.refresh(user_role)
+            # Check if user already exists
+            existing_user = self.user_repository.get_by_email(user_data.email)
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="User with this email already exists"
+                )
             
-            # Create new user with password hash
+            # Get or create user role
+            user_role = self.role_repository.get_or_create(Role.USER)
+            
+            # Create password hash
             password_hash = get_password_hash(user_data.password)
             
-            new_user = UserModel(
-                name=user_data.name,
-                email=user_data.email,
-                phone_number=user_data.phone_number,
-                password_hash=password_hash,
-                role_id=user_role.id
-            )
+            # Create user object
+            new_user_data = {
+                "name": user_data.name,
+                "email": user_data.email,
+                "phone_number": user_data.phone_number,
+                "password_hash": password_hash,
+                "role_id": user_role.id,
+                "is_verified": False  
+            }
             
-            self.db.add(new_user)
-            self.db.commit()
-            self.db.refresh(new_user)
-            return new_user
+            # Create new user
+            new_user = self.user_repository.create(new_user_data)
+            
+            # Generate verification token
+            token = create_verification_token()
+            expires_at = datetime.utcnow() + timedelta(hours=settings.VERIFICATION_TOKEN_EXPIRE_HOURS)
+            
+            # Save verification token
+            self.user_repository.set_verification_token(new_user, token, expires_at)
+            
+            # Send verification email
+            send_verification_email(new_user.email, token)
+            
+            return new_user, token
             
         except IntegrityError:
             self.db.rollback()
@@ -77,6 +105,28 @@ class AuthService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="User with this email already exists"
             )
+    
+    def verify_email(self, token: str) -> bool:
+        """Verify user email with token"""
+        # Find user with this verification token
+        user = self.db.query(UserModel).filter(UserModel.verification_token == token).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification token"
+            )
+        
+        # Check if token is expired
+        if user.verification_token_expires < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification token has expired"
+            )
+        
+        # Mark user as verified
+        self.user_repository.update_verification(user, True)
+        return True
     
     def validate_token(self, token: str) -> Dict[str, Any]:
         """Validate JWT token"""
@@ -90,6 +140,15 @@ class AuthService:
                     detail="Invalid authentication credentials",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
+            
+            # Check if user exists and is active
+            user = self.user_repository.get(UUID(user_id))
+            if not user or not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User is inactive or deleted",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
                 
             return payload
             
@@ -99,3 +158,25 @@ class AuthService:
                 detail="Invalid authentication token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+    
+    def resend_verification_email(self, email: str) -> bool:
+        """Resend verification email"""
+        user = self.user_repository.get_by_email(email)
+        
+        if not user:
+            # Don't reveal if user exists or not for security
+            return True
+        
+        if user.is_verified:
+            # User is already verified
+            return True
+        
+        # Generate new verification token
+        token = create_verification_token()
+        expires_at = datetime.utcnow() + timedelta(hours=settings.VERIFICATION_TOKEN_EXPIRE_HOURS)
+        
+        # Save verification token
+        self.user_repository.set_verification_token(user, token, expires_at)
+        
+        # Send verification email
+        return send_verification_email(user.email, token)

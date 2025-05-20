@@ -37,7 +37,7 @@ class UserResponse(BaseModel):
     role: Role
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserProfile(UserResponse):
     favorites: List[Dict] = []
@@ -45,7 +45,7 @@ class UserProfile(UserResponse):
     orders_count: int = 0
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserRoleUpdate(BaseModel):
     role: Role

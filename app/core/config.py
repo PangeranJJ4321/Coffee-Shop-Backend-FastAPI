@@ -17,12 +17,12 @@ class Settings(BaseSettings):
     # Mailtrap
     MAILTRAP_USERNAME: str
     MAILTRAP_PASSWORD: str
-    MAILTRAP_HOST: str = "smtp.mailtrap.io"
-    MAILTRAP_PORT: int = 2525
+    MAILTRAP_HOST: str 
+    MAILTRAP_PORT: int 
     
     # Email
-    EMAILS_FROM_EMAIL: str = "coffee@example.com"
-    EMAILS_FROM_NAME: str = "Coffee Shop"
+    EMAILS_FROM_EMAIL: str
+    EMAILS_FROM_NAME: str
     
     # Security
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
     
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str
     
     class Config:
         env_file = ".env"

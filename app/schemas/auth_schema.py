@@ -1,6 +1,3 @@
-"""
-Authentication schemas
-"""
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, validator
@@ -44,4 +41,28 @@ class UserResponse(BaseModel):
     role: Role
     
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class EmailVerification(BaseModel):
+    """Email verification schema"""
+    token: str
+
+class ResendVerification(BaseModel):
+    """Resend verification email schema"""
+    email: EmailStr
+
+class PasswordReset(BaseModel):
+    """Password reset schema"""
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    """Password reset confirmation schema"""
+    token: str
+    password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+    
+    @validator('confirm_password')
+    def passwords_match(cls, v, values, **kwargs):
+        if 'password' in values and v != values['password']:
+            raise ValueError('Passwords do not match')
+        return v

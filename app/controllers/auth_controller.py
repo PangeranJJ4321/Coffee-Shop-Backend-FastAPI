@@ -1,9 +1,8 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.schemas.auth_schema import UserLogin, UserRegister, UserResponse
+from app.schemas.auth_schema import EmailVerification, ResendVerification, UserLogin, UserRegister, UserResponse
 from app.services.auth_services import AuthService
-from app.services.user_service import UserService
 
 
 def login_controller(
@@ -28,7 +27,7 @@ def register_controller(
     auth_service : AuthService = Depends()
 
 ):
-    user = auth_service.register_user(user_data)
+    user,_ = auth_service.register_user(user_data)
 
     return UserResponse(
         id=user.id,
@@ -37,3 +36,34 @@ def register_controller(
         phone_number=user.phone_number,
         role=user.role.role
     )
+
+def verify_email_controller(verification_data: EmailVerification, auth_service: AuthService):
+    """
+    Controller for verifying email using a token
+    """
+    token = verification_data.token
+    user = auth_service.validate_token(token)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+    
+    return {"message": "Email successfully verified."}
+
+
+def resend_verification_controller(resend_data: ResendVerification, auth_service: AuthService):
+    """
+    Controller for resending email verification
+    """
+    email = resend_data.email
+    result = auth_service.resend_verification_email(email)
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or already verified"
+        )
+    
+    return {"message": "Verification email sent."}

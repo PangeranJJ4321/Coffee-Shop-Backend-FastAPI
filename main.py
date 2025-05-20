@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from app.core.database import Base, engine
 from app.routes import api
 from app.core.config import settings
 
@@ -28,6 +29,9 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api.api_router, prefix=settings.API_V1_STR)
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def root():
