@@ -1,6 +1,3 @@
-"""
-User model with support for Supabase Auth
-"""
 import enum
 from datetime import datetime
 from sqlalchemy import Column, String, ForeignKey, Enum, Boolean, DateTime
@@ -26,7 +23,6 @@ class RoleModel(BaseModel):
         return f"<Role {self.role}>"
 
 class UserModel(BaseModel):
-    """User model with Supabase Auth integration"""
     __tablename__ = "users"
     
     name = Column(String, nullable=False)
@@ -40,7 +36,7 @@ class UserModel(BaseModel):
     verification_token = Column(String, nullable=True)
     verification_token_expires = Column(DateTime, nullable=True)
     last_login = Column(DateTime, nullable=True)
-    
+
     # Foreign keys
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
     
