@@ -1,3 +1,5 @@
+# app/controllers/auth_controller.py
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -6,10 +8,10 @@ from app.services.auth_services import AuthService
 
 
 def login_controller(
-    form_data : OAuth2PasswordRequestForm = Depends(),
+    form_data : UserLogin,
     auth_service : AuthService = Depends()
 ) :
-    login_data = UserLogin(email=form_data.username, password=form_data.password)
+    login_data = UserLogin(email=form_data.email, password=form_data.password)
     user = auth_service.authenticate_user(login_data)
     
     if not user:
@@ -37,14 +39,18 @@ def register_controller(
         role=user.role.role
     )
 
-def verify_email_controller(verification_data: EmailVerification, auth_service: AuthService):
+def verify_email_controller(
+    verification_data: EmailVerification,
+    auth_service: AuthService = Depends()
+):
     """
     Controller for verifying email using a token
     """
     token = verification_data.token
-    user = auth_service.validate_token(token)
+    # Use the correct verification method
+    success = auth_service.verify_email(token)
 
-    if not user:
+    if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token"
@@ -53,7 +59,10 @@ def verify_email_controller(verification_data: EmailVerification, auth_service: 
     return {"message": "Email successfully verified."}
 
 
-def resend_verification_controller(resend_data: ResendVerification, auth_service: AuthService):
+def resend_verification_controller(
+    resend_data: ResendVerification,
+    auth_service: AuthService = Depends()
+):
     """
     Controller for resending email verification
     """

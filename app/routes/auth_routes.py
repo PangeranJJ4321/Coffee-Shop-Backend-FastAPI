@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.controllers.auth_controller import login_controller, register_controller, verify_email_controller, resend_verification_controller
-from app.schemas.auth_schema import TokenResponse, UserRegister, UserResponse, EmailVerification, ResendVerification
+from app.schemas.auth_schema import TokenResponse, UserLogin, UserRegister, UserResponse, EmailVerification, ResendVerification
 from app.services.auth_services import AuthService
 
 router = APIRouter()
 
 @router.post("/login", response_model=TokenResponse)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    form_data: UserLogin,
     auth_service: AuthService = Depends()
 ):
     """
