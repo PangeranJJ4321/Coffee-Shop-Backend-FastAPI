@@ -2,7 +2,8 @@
 User model with support for Supabase Auth
 """
 import enum
-from sqlalchemy import Column, String, ForeignKey, Enum
+from datetime import datetime
+from sqlalchemy import Column, String, ForeignKey, Enum, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -32,8 +33,13 @@ class UserModel(BaseModel):
     email = Column(String, unique=True, nullable=False)
     phone_number = Column(String, nullable=True)
     
-    # Supabase User ID for reference
-    supabase_uid = Column(String, unique=True, nullable=True)
+    # Authentication fields
+    password_hash = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String, nullable=True)
+    verification_token_expires = Column(DateTime, nullable=True)
+    last_login = Column(DateTime, nullable=True)
     
     # Foreign keys
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
