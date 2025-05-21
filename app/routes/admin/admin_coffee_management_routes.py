@@ -9,7 +9,7 @@ from app.routes.admin import (
     variant_routes, 
     coffee_variant_routes
 ) 
-router = APIRouter(prefix="/menu-management")
+router = APIRouter(prefix="/menu-management", tags=["Admin ~ Coffee  Management"])
 
 # Include admin menu management routes
 router.include_router(coffee_menu_routes.router)
