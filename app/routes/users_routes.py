@@ -14,7 +14,7 @@ from app.schemas.user_schema import (
 
 from app.controllers import user_controller
 
-router = APIRouter(tags=["Users"])
+router = APIRouter()
 
 @router.get("/me", response_model=UserProfile)
 def get_current_user_profile(

@@ -1,7 +1,7 @@
 """
 Pydantic schemas for coffee shop models
 """
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -116,3 +116,57 @@ class CoffeeVariantResponse(CoffeeVariantBase):
 
     class Config:
         from_attributes = True
+
+# ==================== Public Coffee Menu Schemas ====================
+
+class CoffeeVariantDetail(BaseModel):
+    """Schema for variant details in public responses"""
+    id: UUID
+    name: str
+    additional_price: int
+    is_available: bool
+    is_default: bool
+    variant_type_id: UUID
+    variant_type_name: str
+    is_required: bool
+
+    class Config:
+        from_attributes = True
+
+class CoffeeMenuPublicResponse(BaseModel):
+    """Schema for public coffee menu item response"""
+    id: UUID
+    name: str
+    price: int
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    is_available: bool = True
+    rating_average: Optional[float] = None
+    rating_count: int = 0
+    is_favorite: bool = False
+    coffee_shop_id: UUID
+    coffee_shop_name: str
+
+    class Config:
+        from_attributes = True
+
+class CoffeeMenuDetailResponse(CoffeeMenuPublicResponse):
+    """Schema for detailed coffee menu item response"""
+    variants: Dict[str, List[CoffeeVariantDetail]]  # Group variants by variant type
+
+    class Config:
+        from_attributes = True
+
+class CoffeeFilter(BaseModel):
+    """Schema for filtering coffee menu items"""
+    min_price: Optional[int] = None
+    max_price: Optional[int] = None
+    search: Optional[str] = None
+    sort_by: Optional[str] = "name"  # name, price, rating
+    sort_order: Optional[str] = "asc"  # asc, desc
+    rating: Optional[int] = None  # Minimum rating to filter by (1-5)
+
+class RatingCreate(BaseModel):
+    """Schema for creating a rating"""
+    rating: int = Field(..., ge=1, le=5)
+    review: Optional[str] = None

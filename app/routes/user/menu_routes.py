@@ -14,7 +14,7 @@ from app.schemas.coffee_schema import (
     CoffeeFilter
 )
 from app.services.coffee_menu_service import coffee_menu_service
-from app.utils.security import get_current_user, get_optional_user
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/menu", tags=["Coffee Menu"])
 
@@ -23,7 +23,7 @@ async def get_coffee_shop_menu(
     coffee_shop_id: UUID,
     filter_params: CoffeeFilter = Depends(),
     db: Session = Depends(get_db),
-    current_user: Optional[UserModel] = Depends(get_optional_user)
+    current_user: Optional[UserModel] = Depends(get_current_user)
 ):
     """Get all available coffee menu items for a specific coffee shop with optional filtering"""
     return coffee_menu_service.get_public_menu(db, coffee_shop_id, filter_params, current_user)
@@ -32,7 +32,7 @@ async def get_coffee_shop_menu(
 async def get_coffee_details(
     coffee_id: UUID,
     db: Session = Depends(get_db),
-    current_user: Optional[UserModel] = Depends(get_optional_user)
+    current_user: Optional[UserModel] = Depends(get_current_user)
 ):
     """Get detailed information about a specific coffee menu item"""
     coffee = coffee_menu_service.get_coffee_details(db, coffee_id, current_user)

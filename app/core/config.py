@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+from sqlalchemy import true
+
 
 class Settings(BaseSettings):
     """Application settings"""
@@ -31,7 +33,13 @@ class Settings(BaseSettings):
     
     # Frontend
     FRONTEND_URL: str
-    
+
+    # Midtrans
+    MIDTRANS_SANDBOX : bool = True
+    MIDTRANS_CLIENT_KEY: str
+    MIDTRANS_SERVER_KEY : str
+
+
     class Config:
         env_file = ".env"
         case_sensitive = True
