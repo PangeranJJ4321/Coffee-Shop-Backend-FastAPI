@@ -38,5 +38,5 @@ def get_user(
         name=user.name,
         email=user.email,
         phone_number=user.phone_number,
-        role=user.role_id._role_name
+        role=user.role.role
     )

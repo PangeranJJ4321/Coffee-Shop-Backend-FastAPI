@@ -64,7 +64,7 @@ def get_users(
             name=user.name,
             email=user.email,
             phone_number=user.phone_number,
-            role=user.role_id._role_name
+            role=user.role.role
         ) for user in users
     ]
 
@@ -81,5 +81,5 @@ def update_user_role(
         name=updated_user.name,
         email=updated_user.email,
         phone_number=updated_user.phone_number,
-        role=updated_user.role_id._role_name
+        role=updated_user.role.role
     )
