@@ -1,9 +1,11 @@
+# app/routes/user/order_routes.py - Updated with payable orders endpoint. dikit lagi ahaha
+
 """
-Routes for user coffee orders
+Routes for user coffee orders - Updated with pay for others functionality
 """
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -12,7 +14,8 @@ from app.schemas.order_schema import (
     OrderCreate,
     OrderResponse,
     OrderWithItemsResponse,
-    OrderFilterParams
+    OrderFilterParams,
+    PayableOrderResponse
 )
 from app.services.order_service import order_service
 from app.utils.security import get_current_user
@@ -36,6 +39,17 @@ async def get_user_orders(
 ):
     """Get all orders for the current user with optional filtering"""
     return order_service.get_user_orders(db, current_user.id, params)
+
+@router.get("/payable", response_model=List[PayableOrderResponse])  
+async def get_payable_orders(
+    limit: int = Query(default=20, le=100, description="Maximum number of orders to return"),
+    offset: int = Query(default=0, ge=0, description="Number of orders to skip"),
+    coffee_shop_id: UUID = Query(None, description="Filter by coffee shop"),
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Get orders that can be paid by others (excluding current user's orders)"""
+    return order_service.get_payable_orders(db, current_user.id, limit, offset, coffee_shop_id)
 
 @router.get("/{order_id}", response_model=OrderWithItemsResponse)
 async def get_order_details(

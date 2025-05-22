@@ -1,5 +1,7 @@
+# Updated with pay for others endpoints
+
 """
-Routes for payment processing with Midtrans, with improved notification handling
+Routes for payment processing with Midtrans, including pay for others feature
 """
 from typing import Dict, Any
 from uuid import UUID
@@ -12,7 +14,10 @@ from app.models.user import UserModel
 from app.schemas.payment_schema import (
     PaymentRequest,
     PaymentResponse,
-    PaymentStatusResponse
+    PaymentStatusResponse,
+    PayForOthersRequest,
+    PayForOthersResponse,
+    OrderPaymentInfoResponse
 )
 from app.services.payment_service import payment_service
 from app.utils.security import get_current_user
@@ -39,6 +44,49 @@ async def create_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating payment: {str(e)}"
+        )
+
+@router.get("/order/{order_id}/info", response_model=OrderPaymentInfoResponse)
+async def get_order_payment_info(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Get order information for payment (used when someone wants to pay for others)"""
+    try:
+        order_info = payment_service.get_order_payment_info(db, order_id)
+        if not order_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+        return order_info
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting order payment info: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting order payment info: {str(e)}"
+        )
+
+@router.post("/pay-for-others", response_model=PayForOthersResponse)
+async def pay_for_others(
+    payment_data: PayForOthersRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Pay for someone else's order"""
+    try:
+        return payment_service.pay_for_others(db, payment_data, current_user.id)
+    except HTTPException as e:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error creating pay for others payment: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating pay for others payment: {str(e)}"
         )
 
 @router.get("/{order_id}/status", response_model=PaymentStatusResponse)

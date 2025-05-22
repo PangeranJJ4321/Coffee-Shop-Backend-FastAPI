@@ -1,18 +1,22 @@
 """
 Schemas for payment processing
 """
-from typing import Dict, Any, Optional
+from typing import Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.order import StatusType
 
-
 class PaymentRequest(BaseModel):
     order_id: UUID
-    payment_method: str  # Examples: "credit_card", "bank_transfer", etc.
+    payment_method: str = Field(..., description="Payment method (e.g., 'bank_transfer', 'credit_card', 'gopay')")
 
+class PayForOthersRequest(BaseModel):
+    """Request to pay for someone else's order"""
+    order_id: UUID = Field(..., description="Order ID to pay for")
+    payment_method: str = Field(..., description="Payment method (e.g., 'bank_transfer', 'credit_card', 'gopay')")
+    note: Optional[str] = Field(None, description="Optional note for the payment")
 
 class PaymentResponse(BaseModel):
     order_id: UUID
@@ -20,10 +24,24 @@ class PaymentResponse(BaseModel):
     gross_amount: int
     payment_type: str
     transaction_time: datetime
-    expiry_time: Optional[datetime] = None
-    payment_url: str  # For redirect-based payments like bank transfers
-    token: Optional[str] = None  # For direct payments like credit cards
+    expiry_time: datetime
+    payment_url: str
+    token: Optional[str] = None
 
+class PayForOthersResponse(BaseModel):
+    """Response for pay for others payment"""
+    order_id: UUID
+    transaction_id: str
+    gross_amount: int
+    payment_type: str
+    transaction_time: datetime
+    expiry_time: datetime
+    payment_url: str
+    token: Optional[str] = None
+    original_order_user_name: str
+    original_order_user_email: str
+    paid_by_user_name: str
+    note: Optional[str] = None
 
 class PaymentStatusResponse(BaseModel):
     order_id: UUID
@@ -33,18 +51,19 @@ class PaymentStatusResponse(BaseModel):
     transaction_time: datetime
     gross_amount: int
     payment_time: Optional[datetime] = None
+    paid_by_user_id: Optional[UUID] = None
+    paid_by_user_name: Optional[str] = None
 
-
-class PaymentNotification(BaseModel):
-    transaction_id: str
-    status_code: str
-    gross_amount: str
-    payment_type: str
-    transaction_time: str
-    transaction_status: str
-    signature_key: str
-    order_id: str
-    fraud_status: Optional[str] = None
-    settlement_time: Optional[str] = None
-    status_message: Optional[str] = None
-    payment_details: Optional[Dict[str, Any]] = None
+class OrderPaymentInfoResponse(BaseModel):
+    """Response for getting order payment information"""
+    order_id: UUID
+    order_number: str
+    total_price: int
+    status: str
+    ordered_at: datetime
+    user_name: str
+    user_email: str
+    is_paid: bool
+    paid_by_user_id: Optional[UUID] = None
+    paid_by_user_name: Optional[str] = None
+    can_be_paid_by_others: bool
