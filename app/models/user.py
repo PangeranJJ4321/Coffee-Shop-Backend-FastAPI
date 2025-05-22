@@ -36,8 +36,6 @@ class UserModel(BaseModel):
     verification_token = Column(String, nullable=True)
     verification_token_expires = Column(DateTime, nullable=True)
     last_login = Column(DateTime, nullable=True)
-    reset_token = Column(String, nullable=True)
-    reset_token_expires = Column(DateTime, nullable=True)
 
     # Foreign keys
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)
