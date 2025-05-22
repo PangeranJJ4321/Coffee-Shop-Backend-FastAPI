@@ -86,3 +86,49 @@ def send_verification_email(email_to: str, verification_token: str) -> bool:
         html_content=html_content,
         text_content=text_content
     )
+
+
+def send_password_reset_email(email_to: str, reset_token: str) -> bool:
+    """
+    Send password reset email
+    """
+    reset_link = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+    
+    subject = "Coffee Shop - Password Reset"
+    
+    html_content = f"""
+    <html>
+        <body>
+            <p>Hi there,</p>
+            <p>You requested to reset your password for your Coffee Shop account.</p>
+            <p>Please click the link below to reset your password:</p>
+            <p><a href="{reset_link}">Reset Password</a></p>
+            <p>This link will expire in 1 hour for security reasons.</p>
+            <p>If you didn't request a password reset, please ignore this email.</p>
+            <p>Thanks,<br>Coffee Shop Team</p>
+        </body>
+    </html>
+    """
+    
+    text_content = f"""
+    Hi there,
+    
+    You requested to reset your password for your Coffee Shop account.
+    
+    Please click the link below to reset your password:
+    {reset_link}
+    
+    This link will expire in 1 hour for security reasons.
+    
+    If you didn't request a password reset, please ignore this email.
+    
+    Thanks,
+    Coffee Shop Team
+    """
+    
+    return send_email(
+        email_to=email_to,
+        subject=subject,
+        html_content=html_content,
+        text_content=text_content
+    )

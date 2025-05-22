@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     MIDTRANS_CLIENT_KEY: str
     MIDTRANS_SERVER_KEY : str
 
+    # PASSWORD_RESET
+    PASSWORD_RESET_TOKEN_EXPIRE_HOURS: int = 1
 
     class Config:
         env_file = ".env"

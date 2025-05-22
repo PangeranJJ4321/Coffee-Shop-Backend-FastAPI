@@ -15,7 +15,7 @@ from app.models.user import UserModel, Role
 from app.schemas.auth_schema import UserLogin, TokenResponse, UserRegister
 from app.repositories.user_repository import UserRepository
 from app.repositories.role_repository import RoleRepository
-from app.services.email import send_verification_email
+from app.services.email import send_verification_email, send_password_reset_email
 
 class AuthService:
     def __init__(self, db: Session = Depends(get_db)):
@@ -174,3 +174,46 @@ class AuthService:
         
         # Send verification email
         return send_verification_email(user.email, token)
+    
+    def send_password_reset_email(self, email: str) -> bool:
+        """Send password reset email"""
+        user = self.user_repository.get_by_email(email)
+        
+        if not user:
+            # Don't reveal if user exists or not for security
+            return True
+        
+        if not user.is_verified:
+            # User must be verified to reset password
+            return True
+        
+        # Generate password reset token
+        reset_token = create_verification_token()
+        expires_at = datetime.utcnow() + timedelta(hours=settings.PASSWORD_RESET_TOKEN_EXPIRE_HOURS)
+        
+        # Save reset token
+        self.user_repository.set_password_reset_token(user, reset_token, expires_at)
+        
+        # Send password reset email
+        return send_password_reset_email(user.email, reset_token)
+    
+    def reset_password(self, token: str, new_password: str) -> bool:
+        """Reset user password with token"""
+        # Find user with this reset token
+        user = self.db.query(UserModel).filter(UserModel.reset_token == token).first()
+        
+        if not user:
+            return False
+        
+        # Check if token is expired
+        if not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
+            return False
+        
+        # Hash new password
+        password_hash = get_password_hash(new_password)
+        
+        # Update password and clear reset token
+        self.user_repository.update_password(user, password_hash)
+        self.user_repository.clear_password_reset_token(user)
+        
+        return True

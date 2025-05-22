@@ -1,8 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.controllers.auth_controller import login_controller, register_controller, verify_email_controller, resend_verification_controller
-from app.schemas.auth_schema import TokenResponse, UserLogin, UserRegister, UserResponse, EmailVerification, ResendVerification
+from app.controllers.auth_controller import (
+    login_controller, 
+    register_controller, 
+    verify_email_controller, 
+    resend_verification_controller,
+    forgot_password_controller,
+    reset_password_controller
+)
+from app.schemas.auth_schema import (
+    TokenResponse, 
+    UserLogin, 
+    UserRegister, 
+    UserResponse, 
+    EmailVerification, 
+    ResendVerification,
+    PasswordReset,
+    PasswordResetConfirm
+)
 from app.services.auth_services import AuthService
 
 router = APIRouter()
@@ -49,3 +65,25 @@ def resend_verification(
     Resend verification email
     """
     return resend_verification_controller(resend_data, auth_service)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+def forgot_password(
+    reset_data: PasswordReset,
+    auth_service: AuthService = Depends()
+):
+    """
+    Send password reset email
+    """
+    return forgot_password_controller(reset_data, auth_service)
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+def reset_password(
+    reset_data: PasswordResetConfirm,
+    auth_service: AuthService = Depends()
+):
+    """
+    Reset password with token
+    """
+    return reset_password_controller(reset_data, auth_service)

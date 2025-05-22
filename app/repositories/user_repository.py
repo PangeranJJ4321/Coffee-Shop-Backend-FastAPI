@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -56,3 +57,23 @@ class UserRepository(BaseRepository[UserModel, UserRegister, UserUpdate]):
         self.db.commit()
         self.db.refresh(user)
         return user
+    
+    def set_password_reset_token(self, user: UserModel, token: str, expires_at: datetime) -> None:
+        """Set password reset token for user"""
+        user.reset_token = token
+        user.reset_token_expires = expires_at
+        self.db.commit()
+        self.db.refresh(user)
+
+    def clear_password_reset_token(self, user: UserModel) -> None:
+        """Clear password reset token for user"""
+        user.reset_token = None
+        user.reset_token_expires = None
+        self.db.commit()
+        self.db.refresh(user)
+
+    def update_password(self, user: UserModel, password_hash: str) -> None:
+        """Update user password"""
+        user.password_hash = password_hash
+        self.db.commit()
+        self.db.refresh(user)

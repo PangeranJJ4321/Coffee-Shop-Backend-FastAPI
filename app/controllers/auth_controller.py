@@ -3,7 +3,15 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.schemas.auth_schema import EmailVerification, ResendVerification, UserLogin, UserRegister, UserResponse
+from app.schemas.auth_schema import (
+    EmailVerification, 
+    ResendVerification, 
+    UserLogin, 
+    UserRegister, 
+    UserResponse,
+    PasswordReset,
+    PasswordResetConfirm
+)
 from app.services.auth_services import AuthService
 
 
@@ -76,3 +84,36 @@ def resend_verification_controller(
         )
     
     return {"message": "Verification email sent."}
+
+
+def forgot_password_controller(
+    reset_data: PasswordReset,
+    auth_service: AuthService = Depends()
+):
+    """
+    Controller for initiating password reset process
+    """
+    email = reset_data.email
+    result = auth_service.send_password_reset_email(email)
+    
+    # Always return success message for security reasons
+    # Don't reveal whether the email exists in the system
+    return {"message": "If an account with that email exists, a password reset link has been sent."}
+
+
+def reset_password_controller(
+    reset_data: PasswordResetConfirm,
+    auth_service: AuthService = Depends()
+):
+    """
+    Controller for confirming password reset with token
+    """
+    success = auth_service.reset_password(reset_data.token, reset_data.password)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    return {"message": "Password successfully reset."}

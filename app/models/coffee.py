@@ -18,7 +18,9 @@ class CoffeeShopModel(BaseModel):
     
     # Relationships
     menu_items = relationship("CoffeeMenuModel", back_populates="coffee_shop")
+    time_slots = relationship("TimeSlotModel", back_populates="coffee_shop")
     tables = relationship("TableModel", back_populates="coffee_shop")
+    operating_hours = relationship("OperatingHoursModel", back_populates="coffee_shop")
     
     def __repr__(self):
         return f"<CoffeeShop {self.name}>"
