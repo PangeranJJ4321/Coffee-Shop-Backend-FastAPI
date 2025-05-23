@@ -15,7 +15,7 @@ class TableResponse(BaseModel):
     capacity: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class BookingTableCreate(BaseModel):
@@ -55,7 +55,7 @@ class BookingResponse(BaseModel):
     booking_date: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class BookingTableResponse(BaseModel):
@@ -63,14 +63,14 @@ class BookingTableResponse(BaseModel):
     table: TableResponse
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class BookingWithTablesResponse(BookingResponse):
     booking_tables: List[BookingTableResponse]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class AvailableTable(BaseModel):

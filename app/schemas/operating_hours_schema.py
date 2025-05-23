@@ -37,7 +37,7 @@ class TimeSlotInDBBase(TimeSlotBase):
     coffee_shop_id: UUID
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class TimeSlot(TimeSlotInDBBase):
     pass
@@ -62,7 +62,7 @@ class OperatingHoursInDBBase(OperatingHoursBase):
     coffee_shop_id: UUID
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class OperatingHours(OperatingHoursInDBBase):
     pass

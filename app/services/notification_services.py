@@ -18,12 +18,13 @@ from app.core.config import settings
 
 class NotificationService:
     def __init__(self):
-        self.smtp_server = settings.SMTP_SERVER
-        self.smtp_port = settings.SMTP_PORT
-        self.smtp_username = settings.SMTP_USERNAME
-        self.smtp_password = settings.SMTP_PASSWORD
-        self.sender_email = settings.SENDER_EMAIL
-        self.sender_name = settings.SENDER_NAME or "CoffeeBooking System"
+        self.smtp_server = settings.MAILTRAP_HOST
+        self.smtp_port = settings.MAILTRAP_PORT
+        self.smtp_username = settings.MAILTRAP_USERNAME
+        self.smtp_password = settings.MAILTRAP_PASSWORD
+        self.sender_email = settings.EMAILS_FROM_EMAIL
+        self.sender_name = settings.EMAILS_FROM_NAME or "CoffeeBooking System"
+
 
     async def send_email(self, to_email: str, to_name: str, subject: str, html_content: str, text_content: str = None):
         """Send email notification"""
