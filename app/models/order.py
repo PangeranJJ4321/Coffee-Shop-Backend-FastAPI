@@ -41,7 +41,8 @@ class OrderModel(BaseModel):
     order_items = relationship("OrderItemModel", back_populates="order")
     transactions = relationship("TransactionModel", back_populates="order")
     booking = relationship("BookingModel", back_populates="order", uselist=False)
-    
+    status_history = relationship("OrderStatusHistoryModel", back_populates="order")
+
     def __repr__(self):
         return f"<Order {self.order_id}>"
 
