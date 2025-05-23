@@ -5,12 +5,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, func, desc
+from sqlalchemy import func, desc
 
-from app.models.booking import BookingModel, BookingStatus, BookingTableModel
-from app.models.user import UserModel
-from app.models.coffee_shop import CoffeeShopModel
-from app.models.table import TableModel
+from app.models.booking import BookingModel, BookingStatus, BookingTableModel, TableModel
+from app.models.booking_status_history import BookingStatusHistoryModel
 from app.schemas.admin_booking_schema import (
     BookingManagementResponse,
     BookingStatusHistoryResponse,
@@ -31,15 +29,17 @@ class AdminBookingService:
         """Get all bookings with filtering"""
         query = db.query(BookingModel).options(
             joinedload(BookingModel.user),
-            joinedload(BookingModel.coffee_shop),
-            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table)
+            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table).joinedload(TableModel.coffee_shop)
         )
         
         # Apply filters
         if status:
             query = query.filter(BookingModel.status == status)
         if coffee_shop_id:
-            query = query.filter(BookingModel.coffee_shop_id == coffee_shop_id)
+            # Filter by coffee shop through the relationship chain
+            query = query.join(BookingModel.booking_tables)\
+                         .join(BookingTableModel.table)\
+                         .filter(TableModel.coffee_shop_id == coffee_shop_id)
         if user_id:
             query = query.filter(BookingModel.user_id == user_id)
         if booking_date:
@@ -54,8 +54,19 @@ class AdminBookingService:
         # Convert to response format
         result = []
         for booking in bookings:
-            # Get table numbers
+            # Get table numbers and coffee shop info from the first table
             table_numbers = [bt.table.table_number for bt in booking.booking_tables]
+            
+            # Get coffee shop info from the first table
+            coffee_shop = None
+            coffee_shop_name = None
+            coffee_shop_id_value = None
+            
+            if booking.booking_tables:
+                first_table = booking.booking_tables[0].table
+                coffee_shop = first_table.coffee_shop
+                coffee_shop_name = coffee_shop.name
+                coffee_shop_id_value = coffee_shop.id
             
             result.append(BookingManagementResponse(
                 id=booking.id,
@@ -67,8 +78,8 @@ class AdminBookingService:
                 user_id=booking.user_id,
                 user_name=booking.user.full_name,
                 user_email=booking.user.email,
-                coffee_shop_id=booking.coffee_shop_id,
-                coffee_shop_name=booking.coffee_shop.name,
+                coffee_shop_id=coffee_shop_id_value,
+                coffee_shop_name=coffee_shop_name,
                 table_numbers=table_numbers,
                 special_requests=getattr(booking, 'special_requests', None),
                 created_at=booking.created_at,
@@ -81,8 +92,7 @@ class AdminBookingService:
         """Get booking by ID with all details"""
         booking = db.query(BookingModel).options(
             joinedload(BookingModel.user),
-            joinedload(BookingModel.coffee_shop),
-            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table)
+            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table).joinedload(TableModel.coffee_shop)
         ).filter(BookingModel.id == booking_id).first()
         
         if not booking:
@@ -90,6 +100,17 @@ class AdminBookingService:
         
         # Convert to response format
         table_numbers = [bt.table.table_number for bt in booking.booking_tables]
+        
+        # Get coffee shop info from the first table
+        coffee_shop = None
+        coffee_shop_name = None
+        coffee_shop_id_value = None
+        
+        if booking.booking_tables:
+            first_table = booking.booking_tables[0].table
+            coffee_shop = first_table.coffee_shop
+            coffee_shop_name = coffee_shop.name
+            coffee_shop_id_value = coffee_shop.id
         
         return BookingManagementResponse(
             id=booking.id,
@@ -99,10 +120,10 @@ class AdminBookingService:
             guest_count=booking.guest_count,
             table_count=booking.table_count,
             user_id=booking.user_id,
-            user_name=booking.user.full_name,
+            user_name=booking.user.name,
             user_email=booking.user.email,
-            coffee_shop_id=booking.coffee_shop_id,
-            coffee_shop_name=booking.coffee_shop.name,
+            coffee_shop_id=coffee_shop_id_value,
+            coffee_shop_name=coffee_shop_name,
             table_numbers=table_numbers,
             special_requests=getattr(booking, 'special_requests', None),
             created_at=booking.created_at,
@@ -127,17 +148,16 @@ class AdminBookingService:
         booking.updated_at = datetime.utcnow()
         
         # TODO: Create status history record when BookingStatusHistoryModel is implemented
-        # Example implementation:
-        # if changed_by_user_id:
-        #     status_history = BookingStatusHistoryModel(
-        #         booking_id=booking_id,
-        #         old_status=old_status,
-        #         new_status=new_status,
-        #         changed_by_user_id=changed_by_user_id,
-        #         notes=notes,
-        #         changed_at=datetime.utcnow()
-        #     )
-        #     db.add(status_history)
+        if changed_by_user_id:
+            status_history = BookingStatusHistoryModel(
+                booking_id=booking_id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by_user_id=changed_by_user_id,
+                notes=notes,
+                changed_at=datetime.utcnow()
+            )
+            db.add(status_history)
         
         db.commit()
         db.refresh(booking)
@@ -163,16 +183,16 @@ class AdminBookingService:
             updated_bookings.append(booking)
             
             # TODO: Create status history record for each booking when model is implemented
-            # if changed_by_user_id:
-            #     status_history = BookingStatusHistoryModel(
-            #         booking_id=booking.id,
-            #         old_status=old_status,
-            #         new_status=new_status,
-            #         changed_by_user_id=changed_by_user_id,
-            #         notes=notes,
-            #         changed_at=datetime.utcnow()
-            #     )
-            #     db.add(status_history)
+            if changed_by_user_id:
+                status_history = BookingStatusHistoryModel(
+                    booking_id=booking.id,
+                    old_status=old_status,
+                    new_status=new_status,
+                    changed_by_user_id=changed_by_user_id,
+                    notes=notes,
+                    changed_at=datetime.utcnow()
+                )
+                db.add(status_history)
         
         db.commit()
         
@@ -181,24 +201,23 @@ class AdminBookingService:
     
     def get_booking_status_history(self, db: Session, booking_id: UUID) -> List[BookingStatusHistoryResponse]:
         """Get booking status change history"""
-        # TODO: This requires BookingStatusHistoryModel to be implemented
-        # When implemented, use this query:
-        # history = db.query(BookingStatusHistoryModel).options(
-        #     joinedload(BookingStatusHistoryModel.changed_by_user)
-        # ).filter(
-        #     BookingStatusHistoryModel.booking_id == booking_id
-        # ).order_by(desc(BookingStatusHistoryModel.changed_at)).all()
-        # 
-        # return [BookingStatusHistoryResponse(
-        #     id=h.id,
-        #     booking_id=h.booking_id,
-        #     old_status=h.old_status,
-        #     new_status=h.new_status,
-        #     changed_by_user_id=h.changed_by_user_id,
-        #     changed_by_user_name=h.changed_by_user.full_name,
-        #     notes=h.notes,
-        #     changed_at=h.changed_at
-        # ) for h in history]
+        # TODO: This requires BookingStatusHistoryModel to be implemented, perlu kah ini aaa😭
+        history = db.query(BookingStatusHistoryModel).options(
+            joinedload(BookingStatusHistoryModel.changed_by_user)
+        ).filter(
+            BookingStatusHistoryModel.booking_id == booking_id
+        ).order_by(desc(BookingStatusHistoryModel.changed_at)).all()
+        
+        return [BookingStatusHistoryResponse(
+            id=h.id,
+            booking_id=h.booking_id,
+            old_status=h.old_status,
+            new_status=h.new_status,
+            changed_by_user_id=h.changed_by_user_id,
+            changed_by_user_name=h.changed_by_user.name,
+            notes=h.notes,
+            changed_at=h.changed_at
+        ) for h in history]
         
         return []  # Placeholder until model is implemented
     
@@ -210,15 +229,18 @@ class AdminBookingService:
         )
         
         if coffee_shop_id:
-            query = query.filter(BookingModel.coffee_shop_id == coffee_shop_id)
+            # Filter by coffee shop through the relationship chain
+            query = query.join(BookingModel.booking_tables)\
+                         .join(BookingTableModel.table)\
+                         .filter(TableModel.coffee_shop_id == coffee_shop_id)
         
         bookings = query.all()
         
         total_bookings = len(bookings)
-        confirmed_bookings = len([b for b in bookings if b.status == BookingStatus.CONFIRMED])
-        pending_bookings = len([b for b in bookings if b.status == BookingStatus.PENDING])
+        confirmed_bookings = len([b for b in bookings if b.status == BookingStatus.CONFIRM])
+        pending_bookings = len([b for b in bookings if b.status == BookingStatus.NOCONFIRM])
         cancelled_bookings = len([b for b in bookings if b.status == BookingStatus.CANCELLED])
-        completed_bookings = len([b for b in bookings if b.status == BookingStatus.COMPLETED])
+        completed_bookings = len([b for b in bookings if b.status == BookingStatus.SUCCESS])
         
         # Calculate total guests
         total_guests = sum(b.guest_count for b in bookings if b.status != BookingStatus.CANCELLED)
@@ -227,7 +249,7 @@ class AdminBookingService:
         peak_time_slot = None
         if bookings:
             from collections import Counter
-            time_slots = [b.booking_date.hour for b in bookings if b.status in [BookingStatus.CONFIRMED, BookingStatus.COMPLETED]]
+            time_slots = [b.booking_date.hour for b in bookings if b.status in [BookingStatus.CONFIRM, BookingStatus.SUCCESS]]
             if time_slots:
                 most_common_hour = Counter(time_slots).most_common(1)[0][0]
                 peak_time_slot = f"{most_common_hour:02d}:00-{most_common_hour+1:02d}:00"
@@ -252,11 +274,14 @@ class AdminBookingService:
         now = datetime.utcnow()
         query = db.query(BookingModel).filter(
             BookingModel.booking_date >= now,
-            BookingModel.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED])
+            BookingModel.status.in_([BookingStatus.NOCONFIRM, BookingStatus.CONFIRM])
         )
         
         if coffee_shop_id:
-            query = query.filter(BookingModel.coffee_shop_id == coffee_shop_id)
+            # Filter by coffee shop through the relationship chain
+            query = query.join(BookingModel.booking_tables)\
+                         .join(BookingTableModel.table)\
+                         .filter(TableModel.coffee_shop_id == coffee_shop_id)
         
         return query.count()
     
@@ -271,15 +296,17 @@ class AdminBookingService:
         """Get bookings within a date range"""
         query = db.query(BookingModel).options(
             joinedload(BookingModel.user),
-            joinedload(BookingModel.coffee_shop),
-            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table)
+            joinedload(BookingModel.booking_tables).joinedload(BookingTableModel.table).joinedload(TableModel.coffee_shop)
         ).filter(
             func.date(BookingModel.booking_date) >= start_date,
             func.date(BookingModel.booking_date) <= end_date
         )
         
         if coffee_shop_id:
-            query = query.filter(BookingModel.coffee_shop_id == coffee_shop_id)
+            # Filter by coffee shop through the relationship chain
+            query = query.join(BookingModel.booking_tables)\
+                         .join(BookingTableModel.table)\
+                         .filter(TableModel.coffee_shop_id == coffee_shop_id)
         if status:
             query = query.filter(BookingModel.status == status)
         
@@ -289,6 +316,17 @@ class AdminBookingService:
         result = []
         for booking in bookings:
             table_numbers = [bt.table.table_number for bt in booking.booking_tables]
+            
+            # Get coffee shop info from the first table
+            coffee_shop = None
+            coffee_shop_name = None
+            coffee_shop_id_value = None
+            
+            if booking.booking_tables:
+                first_table = booking.booking_tables[0].table
+                coffee_shop = first_table.coffee_shop
+                coffee_shop_name = coffee_shop.name
+                coffee_shop_id_value = coffee_shop.id
             
             result.append(BookingManagementResponse(
                 id=booking.id,
@@ -300,8 +338,8 @@ class AdminBookingService:
                 user_id=booking.user_id,
                 user_name=booking.user.full_name,
                 user_email=booking.user.email,
-                coffee_shop_id=booking.coffee_shop_id,
-                coffee_shop_name=booking.coffee_shop.name,
+                coffee_shop_id=coffee_shop_id_value,
+                coffee_shop_name=coffee_shop_name,
                 table_numbers=table_numbers,
                 special_requests=getattr(booking, 'special_requests', None),
                 created_at=booking.created_at,
@@ -315,7 +353,10 @@ class AdminBookingService:
         query = db.query(BookingModel)
         
         if coffee_shop_id:
-            query = query.filter(BookingModel.coffee_shop_id == coffee_shop_id)
+            # Filter by coffee shop through the relationship chain
+            query = query.join(BookingModel.booking_tables)\
+                         .join(BookingTableModel.table)\
+                         .filter(TableModel.coffee_shop_id == coffee_shop_id)
         
         # Get all bookings
         all_bookings = query.all()
@@ -349,7 +390,7 @@ class AdminBookingService:
             "this_month_bookings": len(this_month_bookings),
             "status_distribution": status_distribution,
             "average_lead_time_days": round(average_lead_time, 2),
-            "completion_rate": (status_distribution.get("COMPLETED", 0) / max(total_bookings, 1)) * 100,
+            "completion_rate": (status_distribution.get("SUCCESS", 0) / max(total_bookings, 1)) * 100,
             "cancellation_rate": (status_distribution.get("CANCELLED", 0) / max(total_bookings, 1)) * 100
         }
 

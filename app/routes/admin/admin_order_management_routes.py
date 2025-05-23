@@ -15,8 +15,8 @@ from app.schemas.admin_order_schema import (
     OrderStatusHistoryResponse,
     BulkOrderStatusUpdate
 )
-from app.services.admin_order_service import admin_order_service
-from app.services.notification_service import notification_service
+from app.services.admin_orders_services import admin_order_service
+from app.services.notification_services import notification_service
 from app.utils.security import get_current_admin_user
 from app.models.order import OrderStatus
 
