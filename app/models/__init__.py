@@ -31,6 +31,13 @@ from app.models.notification import (
     UserFavoriteModel, 
     RatingModel,
 )
+from app.models.booking_status_history import BookingStatusHistoryModel
+from app.models.order_status_history import OrderStatusHistoryModel
+from app.models.operating_hours import (
+    WeekDay,
+    TimeSlotModel,
+    OperatingHoursModel
+)
 
 # List of all models for easy access
 __all__ = [
@@ -57,4 +64,9 @@ __all__ = [
     "NotificationModel",
     "UserFavoriteModel",
     "RatingModel",
+    "BookingStatusHistoryModel",
+    "OrderStatusHistoryModel",
+    "WeekDay",
+    "TimeSlotModel",
+    "OperatingHoursModel"
 ]

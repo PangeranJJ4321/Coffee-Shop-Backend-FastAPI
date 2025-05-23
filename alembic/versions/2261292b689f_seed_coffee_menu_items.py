@@ -1,10 +1,10 @@
 """seed coffee menu items
 
-Revision ID: 80ead3fe85e5
-Revises: cc647bc1aafe
-Create Date: 2025-05-22 19:32:18.522492
-"""
+Revision ID: 2261292b689f
+Revises: 40d2709024b8
+Create Date: 2025-05-23 14:08:15.024382
 
+"""
 from datetime import datetime
 from typing import Sequence, Union
 import uuid
@@ -15,8 +15,8 @@ from sqlalchemy.sql import table, column
 from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
-revision: str = '80ead3fe85e5'
-down_revision: Union[str, None] = 'cc647bc1aafe'
+revision: str = '2261292b689f'
+down_revision: Union[str, None] = '40d2709024b8'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -45,14 +45,14 @@ coffee_variants_table = table(
 
 def upgrade():
     now = datetime.utcnow()
-    coffee_shop_id = '2502896b-ed44-420d-af92-44574740e017'
+    coffee_shop_id = 'dd29a884-3b4c-4a3d-9166-240c77bb0f2e'
 
     # Default variant IDs
     variant_ids = {
-        'Small': '96010d54-0ef3-4d37-ac76-f6601a51dc49',
-        'No Sugar': 'cc3d70e3-5133-4e94-b2c7-d9a5ba2e8285',
-        'Regular Milk': '4bb61b05-6783-42ef-aa2f-1f0e66bc8930',
-        'Hot': '1e8db01e-ffba-4c64-9910-6fecd3012b97'
+        'Small': '77d7ed75-7cce-4b79-b312-4b7414f1289c',
+        'No Sugar': 'f465d610-404e-467e-a867-263e241ed16d',
+        'Regular Milk': '52d272ba-b92c-4d60-9326-4d7c51bd0543',
+        'Hot': 'fe8ae723-6def-417c-86ee-47d3dabf7a3e'
     }
 
     menus = [
@@ -104,3 +104,4 @@ def downgrade():
         )
     """)
     op.execute(f"DELETE FROM coffee_menu WHERE name IN {name_tuple}")
+

@@ -1,8 +1,8 @@
-"""Add password reset columns to users table
+"""add_reset_pass_column
 
-Revision ID: add_password_reset_columns
-Revises: [previous_revision_id]
-Create Date: 2024-12-20 10:00:00.000000
+Revision ID: 70ec36810670
+Revises: a769c30c68e5
+Create Date: 2025-05-23 13:45:50.954588
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'add_password_reset_columns'
-down_revision: Union[str, None] = "seed_001"  # Replace with your previous revision ID
+revision: str = '70ec36810670'
+down_revision: Union[str, None] = 'a769c30c68e5'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

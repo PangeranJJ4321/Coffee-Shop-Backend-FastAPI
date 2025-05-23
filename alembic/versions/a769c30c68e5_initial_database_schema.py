@@ -1,8 +1,8 @@
-"""initial migration
+"""Initial database schema
 
-Revision ID: a9005c2d1e37
+Revision ID: a769c30c68e5
 Revises: 
-Create Date: 2025-05-22 15:49:15.091686
+Create Date: 2025-05-23 13:36:57.805996
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a9005c2d1e37'
+revision: str = 'a769c30c68e5'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -62,10 +62,34 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['coffee_shop_id'], ['coffee_shops.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('operating_hours',
+    sa.Column('day', sa.Enum('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY', name='weekday'), nullable=False),
+    sa.Column('opening_time', sa.Time(), nullable=False),
+    sa.Column('closing_time', sa.Time(), nullable=False),
+    sa.Column('is_open', sa.Boolean(), nullable=False),
+    sa.Column('coffee_shop_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['coffee_shop_id'], ['coffee_shops.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('tables',
     sa.Column('table_number', sa.String(), nullable=False),
     sa.Column('capacity', sa.Integer(), nullable=False),
     sa.Column('is_available', sa.Boolean(), nullable=False),
+    sa.Column('coffee_shop_id', sa.UUID(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['coffee_shop_id'], ['coffee_shops.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('time_slots',
+    sa.Column('start_time', sa.Time(), nullable=False),
+    sa.Column('end_time', sa.Time(), nullable=False),
+    sa.Column('max_capacity', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('coffee_shop_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -191,6 +215,20 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('order_status_history',
+    sa.Column('order_id', sa.UUID(), nullable=False),
+    sa.Column('old_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=True),
+    sa.Column('new_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=False),
+    sa.Column('changed_by_user_id', sa.UUID(), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('changed_at', sa.DateTime(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['changed_by_user_id'], ['users.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
     op.create_table('transactions',
     sa.Column('transaction_id', sa.String(), nullable=False),
     sa.Column('gross_amount', sa.Integer(), nullable=False),
@@ -205,6 +243,20 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('transaction_id')
+    )
+    op.create_table('booking_status_history',
+    sa.Column('booking_id', sa.UUID(), nullable=False),
+    sa.Column('old_status', sa.Enum('NOCONFIRM', 'CONFIRM', 'SUCCESS', 'CANCELLED', name='bookingstatus'), nullable=True),
+    sa.Column('new_status', sa.Enum('NOCONFIRM', 'CONFIRM', 'SUCCESS', 'CANCELLED', name='bookingstatus'), nullable=False),
+    sa.Column('changed_by_user_id', sa.UUID(), nullable=True),
+    sa.Column('notes', sa.Text(), nullable=True),
+    sa.Column('changed_at', sa.DateTime(), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['booking_id'], ['bookings.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['changed_by_user_id'], ['users.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('booking_tables',
     sa.Column('booking_id', sa.UUID(), nullable=False),
@@ -253,7 +305,9 @@ def downgrade() -> None:
     op.drop_table('payouts')
     op.drop_table('order_item_variants')
     op.drop_table('booking_tables')
+    op.drop_table('booking_status_history')
     op.drop_table('transactions')
+    op.drop_table('order_status_history')
     op.drop_table('order_items')
     op.drop_table('bookings')
     op.drop_table('user_favorites')
@@ -263,7 +317,9 @@ def downgrade() -> None:
     op.drop_table('coffee_variants')
     op.drop_table('variants')
     op.drop_table('users')
+    op.drop_table('time_slots')
     op.drop_table('tables')
+    op.drop_table('operating_hours')
     op.drop_table('coffee_menu')
     op.drop_table('variant_types')
     op.drop_table('roles')

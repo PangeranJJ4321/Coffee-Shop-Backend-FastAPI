@@ -1,8 +1,8 @@
 """pay for others support
 
-Revision ID: 871a69f1be57
-Revises: 80ead3fe85e5
-Create Date: 2025-05-22 22:38:08.897872
+Revision ID: a0b05f0f2c8b
+Revises: 9e139ec6c5f4
+Create Date: 2025-05-23 14:03:53.242480
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '871a69f1be57'
-down_revision: Union[str, None] = '80ead3fe85e5'
+revision: str = 'a0b05f0f2c8b'
+down_revision: Union[str, None] = '9e139ec6c5f4'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -70,4 +70,5 @@ def downgrade():
 
     # If you added the constraint, also drop it here:
     # op.execute("ALTER TABLE orders DROP CONSTRAINT chk_no_self_pay_for_others")
+
 

@@ -1,8 +1,8 @@
-"""create coffee_shops table
+"""seed coffee_shops table
 
-Revision ID: cc647bc1aafe
-Revises: add_password_reset_columns
-Create Date: 2025-05-22 19:06:34.332666
+Revision ID: 40d2709024b8
+Revises: a0b05f0f2c8b
+Create Date: 2025-05-23 14:06:04.024390
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'cc647bc1aafe'
-down_revision: Union[str, None] = 'add_password_reset_columns'
+revision: str = '40d2709024b8'
+down_revision: Union[str, None] = 'a0b05f0f2c8b'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

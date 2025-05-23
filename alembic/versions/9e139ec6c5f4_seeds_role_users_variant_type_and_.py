@@ -1,10 +1,13 @@
-"""Seed initial data
+"""seeds role users, variant type and variant coffee
 
-Revision ID: seed_001
-Revises: [previous_revision_id]
-Create Date: 2024-01-01 00:00:00.000000
+Revision ID: 9e139ec6c5f4
+Revises: 70ec36810670
+Create Date: 2025-05-23 13:54:07.570238
 
 """
+from typing import Sequence, Union
+import uuid
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.sql import table, column, insert
@@ -13,10 +16,11 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 # revision identifiers, used by Alembic.
-revision = 'seed_001'
-down_revision = 'a9005c2d1e37'  # ganti dengan revision sebelumnya
-branch_labels = None
-depends_on = None
+revision: str = '9e139ec6c5f4'
+down_revision: Union[str, None] = '70ec36810670'
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
 
 def upgrade():
     """Seed initial reference data"""
