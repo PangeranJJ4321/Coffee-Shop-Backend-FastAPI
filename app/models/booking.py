@@ -52,6 +52,7 @@ class BookingModel(BaseModel):
     user = relationship("UserModel", back_populates="bookings")
     order = relationship("OrderModel", back_populates="booking")
     booking_tables = relationship("BookingTableModel", back_populates="booking")
+    status_history = relationship("BookingStatusHistoryModel", back_populates="booking")
     
     def __repr__(self):
         return f"<Booking {self.booking_id}>"
