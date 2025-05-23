@@ -51,8 +51,10 @@ class AdminOrderService:
         for order in orders:
             # Get coffee shop info from first order item
             coffee_shop_name = "Unknown"
+            coffee_shop_id_val = None
             if order.order_items:
                 coffee_shop_name = order.order_items[0].coffee.coffee_shop.name
+                coffee_shop_id_val = order.order_items[0].coffee.coffee_shop_id
             
             # Create items summary
             items_summary = ", ".join([
@@ -71,7 +73,7 @@ class AdminOrderService:
                 user_id=order.user_id,
                 user_name=order.user.full_name,
                 user_email=order.user.email,
-                coffee_shop_id=order.order_items[0].coffee.coffee_shop_id if order.order_items else None,
+                coffee_shop_id=coffee_shop_id_val,
                 coffee_shop_name=coffee_shop_name,
                 items_count=len(order.order_items),
                 items_summary=items_summary,
@@ -98,7 +100,8 @@ class AdminOrderService:
         db: Session, 
         order_id: UUID, 
         new_status: OrderStatus,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        changed_by_user_id: Optional[UUID] = None
     ):
         """Update order status and create history record"""
         order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
@@ -109,28 +112,31 @@ class AdminOrderService:
         order.status = new_status
         order.updated_at = datetime.utcnow()
         
-        # Create status history record (you'll need to create this model)
-        # status_history = OrderStatusHistoryModel(
-        #     order_id=order_id,
-        #     old_status=old_status,
-        #     new_status=new_status,
-        #     changed_by_user_id=changed_by_user_id,
-        #     notes=notes,
-        #     changed_at=datetime.utcnow()
-        # )
-        # db.add(status_history)
+        # TODO: Create status history record when OrderStatusHistoryModel is implemented
+        # Example implementation:
+        # if changed_by_user_id:
+        #     status_history = OrderStatusHistoryModel(
+        #         order_id=order_id,
+        #         old_status=old_status,
+        #         new_status=new_status,
+        #         changed_by_user_id=changed_by_user_id,
+        #         notes=notes,
+        #         changed_at=datetime.utcnow()
+        #     )
+        #     db.add(status_history)
         
         db.commit()
         db.refresh(order)
         
-        return self.get_order_by_id(db, order_id)
+        return order
     
     def bulk_update_order_status(
         self,
         db: Session,
         order_ids: List[UUID],
         new_status: OrderStatus,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        changed_by_user_id: Optional[UUID] = None
     ):
         """Bulk update order statuses"""
         orders = db.query(OrderModel).filter(OrderModel.id.in_(order_ids)).all()
@@ -142,21 +148,83 @@ class AdminOrderService:
             order.updated_at = datetime.utcnow()
             updated_orders.append(order)
             
-            # Create status history record for each order
-            # (implement OrderStatusHistoryModel first)
+            # TODO: Create status history record for each order when model is implemented
+            # if changed_by_user_id:
+            #     status_history = OrderStatusHistoryModel(
+            #         order_id=order.id,
+            #         old_status=old_status,
+            #         new_status=new_status,
+            #         changed_by_user_id=changed_by_user_id,
+            #         notes=notes,
+            #         changed_at=datetime.utcnow()
+            #     )
+            #     db.add(status_history)
         
         db.commit()
         
-        # Return updated orders with full details
-        return [self.get_order_by_id(db, order.id) for order in updated_orders]
+        # Return updated orders with full details (convert to OrderManagementResponse)
+        result = []
+        for order in updated_orders:
+            # Get coffee shop info
+            coffee_shop_name = "Unknown"
+            coffee_shop_id_val = None
+            if order.order_items:
+                coffee_shop_name = order.order_items[0].coffee.coffee_shop.name
+                coffee_shop_id_val = order.order_items[0].coffee.coffee_shop_id
+            
+            # Create items summary
+            items_summary = ", ".join([
+                f"{item.quantity}x {item.coffee.name}" 
+                for item in order.order_items[:3]
+            ])
+            if len(order.order_items) > 3:
+                items_summary += f" (+{len(order.order_items) - 3} more)"
+            
+            result.append(OrderManagementResponse(
+                id=order.id,
+                order_id=order.order_id,
+                status=order.status,
+                total_price=order.total_price,
+                ordered_at=order.ordered_at,
+                user_id=order.user_id,
+                user_name=order.user.full_name,
+                user_email=order.user.email,
+                coffee_shop_id=coffee_shop_id_val,
+                coffee_shop_name=coffee_shop_name,
+                items_count=len(order.order_items),
+                items_summary=items_summary,
+                payment_status="Paid" if order.paid_by_user_id else "Unpaid",
+                paid_by_user_id=order.paid_by_user_id,
+                paid_by_user_name=order.paid_by_user.full_name if order.paid_by_user else None,
+                booking_id=order.booking_id,
+                created_at=order.created_at,
+                updated_at=order.updated_at
+            ))
+        
+        return result
     
-    def get_order_status_history(self, db: Session, order_id: UUID):
+    def get_order_status_history(self, db: Session, order_id: UUID) -> List[OrderStatusHistoryResponse]:
         """Get order status change history"""
-        # This requires OrderStatusHistoryModel to be implemented
-        # return db.query(OrderStatusHistoryModel).filter(
+        # TODO: This requires OrderStatusHistoryModel to be implemented
+        # When implemented, use this query:
+        # history = db.query(OrderStatusHistoryModel).options(
+        #     joinedload(OrderStatusHistoryModel.changed_by_user)
+        # ).filter(
         #     OrderStatusHistoryModel.order_id == order_id
         # ).order_by(desc(OrderStatusHistoryModel.changed_at)).all()
-        return []  # Placeholder
+        # 
+        # return [OrderStatusHistoryResponse(
+        #     id=h.id,
+        #     order_id=h.order_id,
+        #     old_status=h.old_status,
+        #     new_status=h.new_status,
+        #     changed_by_user_id=h.changed_by_user_id,
+        #     changed_by_user_name=h.changed_by_user.full_name,
+        #     notes=h.notes,
+        #     changed_at=h.changed_at
+        # ) for h in history]
+        
+        return []  # Placeholder until model is implemented
     
     def get_pending_orders_count(self, db: Session, coffee_shop_id: Optional[UUID] = None) -> int:
         """Get count of pending orders"""
@@ -171,7 +239,7 @@ class AdminOrderService:
         
         return query.count()
     
-    def get_today_orders_summary(self, db: Session, coffee_shop_id: Optional[UUID] = None):
+    def get_today_orders_summary(self, db: Session, coffee_shop_id: Optional[UUID] = None) -> TodayOrdersSummary:
         """Get today's orders summary"""
         today = date.today()
         query = db.query(OrderModel).filter(
@@ -179,30 +247,4 @@ class AdminOrderService:
         )
         
         if coffee_shop_id:
-            query = query.join(OrderItemModel).join(CoffeeMenuModel).filter(
-                CoffeeMenuModel.coffee_shop_id == coffee_shop_id
-            )
-        
-        orders = query.all()
-        
-        total_orders = len(orders)
-        pending_orders = len([o for o in orders if o.status == OrderStatus.PENDING])
-        processing_orders = len([o for o in orders if o.status in [OrderStatus.CONFIRMED, OrderStatus.PREPARING]])
-        completed_orders = len([o for o in orders if o.status == OrderStatus.COMPLETED])
-        cancelled_orders = len([o for o in orders if o.status == OrderStatus.CANCELLED])
-        
-        total_revenue = sum(o.total_price for o in orders if o.status != OrderStatus.CANCELLED)
-        average_order_value = total_revenue // total_orders if total_orders > 0 else 0
-        
-        return TodayOrdersSummary(
-            total_orders=total_orders,
-            pending_orders=pending_orders,
-            processing_orders=processing_orders,
-            completed_orders=completed_orders,
-            cancelled_orders=cancelled_orders,
-            total_revenue=total_revenue,
-            average_order_value=average_order_value
-        )
-
-# Create instance
-admin_order_service = AdminOrderService()
+            query = query.join(OrderItem
