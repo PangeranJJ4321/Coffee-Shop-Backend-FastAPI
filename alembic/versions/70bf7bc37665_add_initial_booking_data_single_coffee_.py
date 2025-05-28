@@ -30,13 +30,11 @@ class WeekDay(enum.Enum):
     SUNDAY = "SUNDAY"
 
 def upgrade():
-    conn = op.get_bind()
-    meta = sa.MetaData(bind=conn)
     single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
 
     # Insert operating hours
     operating_hours = sa.Table(
-        'operating_hours', meta,
+        'operating_hours',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('day', sa.Enum(WeekDay)),
         sa.Column('opening_time', sa.Time),
@@ -74,7 +72,7 @@ def upgrade():
 
     # Insert time slots
     time_slots = sa.Table(
-        'time_slots', meta,
+        'time_slots',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('start_time', sa.Time),
         sa.Column('end_time', sa.Time),
@@ -112,11 +110,10 @@ def upgrade():
     op.bulk_insert(time_slots, time_slots_data)
 
 def downgrade():
-    conn = op.get_bind()
     single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
 
-    conn.execute(sa.text("DELETE FROM time_slots WHERE coffee_shop_id = :id"), {"id": str(single_coffee_shop_id)})
-    conn.execute(sa.text("DELETE FROM operating_hours WHERE coffee_shop_id = :id"), {"id": str(single_coffee_shop_id)})
+    op.execute(f"""DELETE FROM time_slots WHERE coffee_shop_id = {single_coffee_shop_id}""")
+    op.execute(f"""DELETE FROM operating_hours WHERE coffee_shop_id = {single_coffee_shop_id}""")
     
     # Optional:
     # conn.execute(sa.text("DELETE FROM coffee_shops WHERE id = :id"), {"id": str(single_coffee_shop_id)})
