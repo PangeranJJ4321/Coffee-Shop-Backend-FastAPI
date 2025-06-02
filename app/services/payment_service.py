@@ -6,7 +6,7 @@ import json
 import hashlib
 import requests
 import logging
-from typing import Dict, Any, Optional, List # Tambahkan List
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.models.order import OrderModel, OrderStatus, TransactionModel, StatusType
 from app.models.user import UserModel
 from app.models.notification import NotificationModel
-from app.schemas.payment_schema import ( # Impor skema yang diperbarui
+from app.schemas.payment_schema import (
     PaymentRequest, 
     PaymentResponse, 
     PayForOthersRequest, 
@@ -66,14 +66,17 @@ class PaymentService:
         actions = midtrans_response.get("actions", None) # Ini untuk GoPay (QR, deeplink)
         
         qr_code_url = None
+        deeplink_url = None
         if actions:
             for action in actions:
-                # Midtrans GoPay QR action name might be "generate_qr_code" or similar
-                # You might need to inspect actual Midtrans response for exact name/type
+                # Midtrans GoPay QR action name is typically "generate_qr_code"
                 if action.get("name") == "generate_qr_code" and action.get("url"):
                     qr_code_url = action.get("url")
                     break
-                # Or for deeplink: if action.get("name") == "deeplink_redirect" and action.get("url"):
+                # If you also need deeplink:
+                elif action.get("name") == "deeplplink_redirect" and action.get("url"):
+                    deeplink_url = action.get("url")
+                    break
 
         response_data = {
             "order_id": order_id,
@@ -86,7 +89,8 @@ class PaymentService:
             "token": token,
             "va_numbers": va_numbers,
             "actions": actions, 
-            "qr_code_url": qr_code_url
+            "qr_code_url": qr_code_url, # Sertakan URL QR jika ditemukan
+            "deeplink_url": deeplink_url
         }
 
         if original_order_user_name and original_order_user_email and paid_by_user_name:
@@ -511,7 +515,7 @@ class PaymentService:
                         # Pay for others scenario
                         notification_original = NotificationModel(
                             type="payment_failed",
-                            message=f"Payment for your order {order.order_id} has failed or been cancelled.",
+                            message=f"Payment for your order {order.order_id} has failed or been cancelled. The order is now available for payment again.",
                             is_read=False,
                             user_id=order.user_id
                         )
@@ -728,6 +732,14 @@ class PaymentService:
                 elif payment_type == "credit_card":
                     if "masked_card" in notification:
                         payment_details["masked_card"] = notification["masked_card"]
+                elif payment_type == "gopay": # Tambahkan penanganan untuk GoPay/E-Wallet
+                    if "actions" in notification:
+                        payment_details["actions"] = notification["actions"]
+                        # Anda juga bisa mengekstrak QR code URL di sini jika ada di notifikasi
+                        for action in notification["actions"]:
+                            if action.get("name") == "generate_qr_code" and action.get("url"):
+                                payment_details["qr_code_url"] = action.get("url")
+                                break
                 # Add more payment types as needed
             
             # Add pay-for-others info to payment details
