@@ -87,6 +87,7 @@ class TransactionModel(BaseModel):
     payment_time = Column(DateTime, nullable=True)
     expiry_time = Column(DateTime, nullable=True)
     transaction_time = Column(DateTime, nullable=False)
+    payment_type = Column(String, nullable=False)
     
     # Foreign keys
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
