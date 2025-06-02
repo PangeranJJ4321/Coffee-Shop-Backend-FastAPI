@@ -1,6 +1,3 @@
-"""
-Pydantic schemas for coffee shop models
-"""
 from typing import Dict, List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
@@ -13,7 +10,7 @@ class CoffeeMenuBase(BaseModel):
     name: str
     price: int
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None  # This remains Optional[str] for the stored URL/path
     is_available: bool = True
 
 class CoffeeMenuCreate(CoffeeMenuBase):
@@ -25,9 +22,9 @@ class CoffeeMenuUpdate(BaseModel):
     name: Optional[str] = None
     price: Optional[int] = None
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None  # Allows updating to a new URL or explicitly setting to None
     is_available: Optional[bool] = None
-    coffee_shop_id: Optional[UUID] = None
+    coffee_shop_id: Optional[UUID] = None # Allowing to change coffee shop if needed
 
 class CoffeeMenuResponse(CoffeeMenuBase):
     """Schema for coffee menu item response"""
@@ -139,7 +136,7 @@ class CoffeeMenuPublicResponse(BaseModel):
     name: str
     price: int
     description: Optional[str] = None
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None # Still Optional[str] for response
     is_available: bool = True
     rating_average: Optional[float] = None
     rating_count: int = 0

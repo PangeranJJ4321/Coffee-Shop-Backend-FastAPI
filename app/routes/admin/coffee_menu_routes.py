@@ -1,23 +1,36 @@
-from fastapi import APIRouter, Depends, status
+# app/routes/admin/coffee_menu_routes.py
+from fastapi import APIRouter, Depends, status, UploadFile, File, Form # Import File and Form
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 from app.controllers.coffee_menu_controller import CoffeeMenuController
 from app.schemas.coffee_schema import CoffeeMenuCreate, CoffeeMenuUpdate, CoffeeMenuResponse
-from app.core.database import get_db 
+from app.core.database import get_db
 from app.utils.security import get_current_admin_user
 
 router = APIRouter()
 
 @router.post("/menu", response_model=CoffeeMenuResponse, status_code=status.HTTP_201_CREATED)
-def create_coffee_menu(
-    coffee_menu: CoffeeMenuCreate,
+async def create_coffee_menu( # Make async
+    name: str = Form(...), # Use Form for individual fields
+    price: int = Form(...),
+    description: Optional[str] = Form(None),
+    is_available: bool = Form(True),
+    coffee_shop_id: UUID = Form(...),
+    image_file: Optional[UploadFile] = File(None), # Accept UploadFile
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Create a new coffee menu item (Admin only)"""
+    coffee_menu_data = CoffeeMenuCreate(
+        name=name,
+        price=price,
+        description=description,
+        is_available=is_available,
+        coffee_shop_id=coffee_shop_id
+    )
     controller = CoffeeMenuController(db)
-    return controller.create_coffee_menu(coffee_menu)
+    return await controller.create_coffee_menu(coffee_menu_data, image_file) # Pass image_file
 
 @router.get("/menu", response_model=List[CoffeeMenuResponse])
 def get_coffee_menu(
@@ -42,23 +55,37 @@ def get_coffee_menu_by_id(
     return controller.get_coffee_menu_by_id(coffee_id)
 
 @router.put("/menu/{coffee_id}", response_model=CoffeeMenuResponse)
-def update_coffee_menu(
+async def update_coffee_menu( # Make async
     coffee_id: UUID,
-    coffee_menu: CoffeeMenuUpdate,
+    name: Optional[str] = Form(None),
+    price: Optional[int] = Form(None),
+    description: Optional[str] = Form(None),
+    image_url: Optional[str] = Form(None), # Allow updating by URL directly or setting to None
+    is_available: Optional[bool] = Form(None),
+    coffee_shop_id: Optional[UUID] = Form(None),
+    image_file: Optional[UploadFile] = File(None), # Accept new image file
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Update a coffee menu item (Admin only)"""
+    update_data = CoffeeMenuUpdate(
+        name=name,
+        price=price,
+        description=description,
+        image_url=image_url, 
+        is_available=is_available,
+        coffee_shop_id=coffee_shop_id
+    )
     controller = CoffeeMenuController(db)
-    return controller.update_coffee_menu(coffee_id, coffee_menu)
+    return await controller.update_coffee_menu(coffee_id, update_data, image_file) # Pass image_file
 
 @router.delete("/menu/{coffee_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_coffee_menu(
+async def delete_coffee_menu( # Make async
     coffee_id: UUID,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Delete a coffee menu item (Admin only)"""
     controller = CoffeeMenuController(db)
-    controller.delete_coffee_menu(coffee_id)
+    await controller.delete_coffee_menu(coffee_id) # Await the async call
     return None
