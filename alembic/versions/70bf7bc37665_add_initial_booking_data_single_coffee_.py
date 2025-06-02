@@ -1,10 +1,3 @@
-"""add_initial_booking_data_single_coffee_shop
-
-Revision ID: 70bf7bc37665
-Revises: 10672d139a75
-Create Date: 2025-05-29 01:07:46.587476
-"""
-
 from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
@@ -33,18 +26,7 @@ def upgrade():
     single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
 
     # Insert operating hours
-    operating_hours = sa.Table(
-        'operating_hours',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('day', sa.Enum(WeekDay)),
-        sa.Column('opening_time', sa.Time),
-        sa.Column('closing_time', sa.Time),
-        sa.Column('is_open', sa.Boolean),
-        sa.Column('coffee_shop_id', postgresql.UUID(as_uuid=True)),
-        sa.Column('created_at', sa.DateTime),
-        sa.Column('updated_at', sa.DateTime),
-    )
-
+    # Do NOT redefine the table here. Assume it already exists from a previous migration.
     days = [e.value for e in WeekDay]
     operating_hours_data = []
     for day in days:
@@ -59,7 +41,7 @@ def upgrade():
         }[day]
         operating_hours_data.append({
             'id': uuid4(),
-            'coffee_shop_id': single_coffee_shop_id,
+            'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
             'day': day,
             'opening_time': time(opening, 0),
             'closing_time': time(closing, 0),
@@ -68,26 +50,24 @@ def upgrade():
             'updated_at': datetime.utcnow(),
         })
 
-    op.bulk_insert(operating_hours, operating_hours_data)
+    # Use a connection to bulk insert
+    conn = op.get_bind()
+    for data in operating_hours_data:
+        conn.execute(
+            sa.text(
+                "INSERT INTO operating_hours (id, day, opening_time, closing_time, is_open, coffee_shop_id, created_at, updated_at) "
+                "VALUES (:id, :day, :opening_time, :closing_time, :is_open, :coffee_shop_id, :created_at, :updated_at)"
+            ),
+            data
+        )
 
     # Insert time slots
-    time_slots = sa.Table(
-        'time_slots',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('start_time', sa.Time),
-        sa.Column('end_time', sa.Time),
-        sa.Column('max_capacity', sa.Integer),
-        sa.Column('is_active', sa.Boolean),
-        sa.Column('coffee_shop_id', postgresql.UUID(as_uuid=True)),
-        sa.Column('created_at', sa.DateTime),
-        sa.Column('updated_at', sa.DateTime),
-    )
-
+    # Do NOT redefine the table here. Assume it already exists.
     time_slots_data = []
     for h in range(7, 23):
         time_slots_data.append({
             'id': uuid4(),
-            'coffee_shop_id': single_coffee_shop_id,
+            'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
             'start_time': time(h, 0),
             'end_time': time(h + 1, 0),
             'max_capacity': 15,
@@ -98,7 +78,7 @@ def upgrade():
         if h < 22:
             time_slots_data.append({
                 'id': uuid4(),
-                'coffee_shop_id': single_coffee_shop_id,
+                'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
                 'start_time': time(h, 30),
                 'end_time': time(h + 1, 30),
                 'max_capacity': 10,
@@ -107,13 +87,22 @@ def upgrade():
                 'updated_at': datetime.utcnow(),
             })
 
-    op.bulk_insert(time_slots, time_slots_data)
+    # Use a connection to bulk insert
+    for data in time_slots_data:
+        conn.execute(
+            sa.text(
+                "INSERT INTO time_slots (id, start_time, end_time, max_capacity, is_active, coffee_shop_id, created_at, updated_at) "
+                "VALUES (:id, :start_time, :end_time, :max_capacity, :is_active, :coffee_shop_id, :created_at, :updated_at)"
+            ),
+            data
+        )
 
 def downgrade():
     single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
 
-    op.execute(f"""DELETE FROM time_slots WHERE coffee_shop_id = {single_coffee_shop_id}""")
-    op.execute(f"""DELETE FROM operating_hours WHERE coffee_shop_id = {single_coffee_shop_id}""")
+    conn = op.get_bind()
+    conn.execute(sa.text(f"DELETE FROM time_slots WHERE coffee_shop_id = '{single_coffee_shop_id}'"))
+    conn.execute(sa.text(f"DELETE FROM operating_hours WHERE coffee_shop_id = '{single_coffee_shop_id}'"))
     
     # Optional:
     # conn.execute(sa.text("DELETE FROM coffee_shops WHERE id = :id"), {"id": str(single_coffee_shop_id)})
