@@ -70,7 +70,7 @@ class PaymentService:
         if actions:
             for action in actions:
                 # Midtrans GoPay QR action name is typically "generate_qr_code"
-                if action.get("name") == "generate_qr_code" and action.get("url"):
+                if action.get("name") == "generate-qr-code" and action.get("url"):
                     qr_code_url = action.get("url")
                     break
                 # If you also need deeplink:
