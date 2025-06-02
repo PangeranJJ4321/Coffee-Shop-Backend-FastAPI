@@ -43,13 +43,16 @@ class CoffeeMenuService:
                 detail=f"Coffee shop with id {coffee_menu.coffee_shop_id} not found"
             )
 
-        image_url = None
+        processed_image_url = None
         if image_file:
             # Save the uploaded file to Supabase Storage and get its public URL
             image_url = await upload_file_to_supabase(image_file, subdirectory="coffee_menu_images")
 
         # Create new coffee menu item
-        db_coffee_menu = CoffeeMenuModel(**coffee_menu.dict(), image_url=image_url)
+        db_coffee_menu = CoffeeMenuModel(
+            **coffee_menu.dict(exclude={"image_url"}), 
+            image_url=processed_image_url 
+        )
         self.db.add(db_coffee_menu)
         self.db.commit()
         self.db.refresh(db_coffee_menu)
