@@ -1,6 +1,3 @@
-"""
-Coffee shop and menu models
-"""
 from sqlalchemy import Column, String, Text, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship

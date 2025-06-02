@@ -1,6 +1,3 @@
-"""
-Model for booking status history tracking
-"""
 from sqlalchemy import Column, Text, ForeignKey, Enum, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID

@@ -1,6 +1,3 @@
-"""
-Operating hours and booking capacity models
-"""
 import enum
 from datetime import time
 from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum, Time

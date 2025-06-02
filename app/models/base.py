@@ -1,6 +1,3 @@
-"""
-Base model for all database models
-"""
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, DateTime, String

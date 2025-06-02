@@ -1,6 +1,3 @@
-"""
-Order and payment models
-"""
 import enum
 from sqlalchemy import Column, String, Text, Integer, ForeignKey, Enum, DateTime
 from sqlalchemy.dialects.postgresql import UUID

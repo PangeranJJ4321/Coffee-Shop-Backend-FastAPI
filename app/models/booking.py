@@ -1,6 +1,3 @@
-"""
-Booking and table models
-"""
 import enum
 from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum, DateTime
 from sqlalchemy.dialects.postgresql import UUID
