@@ -58,7 +58,7 @@ async def upload_file_to_supabase(upload_file: UploadFile, subdirectory: Optiona
         response_data = supabase_client.storage.from_(settings.SUPABASE_BUCKET_NAME).upload( # Use settings.SUPABASE_BUCKET_NAME
             file=contents,
             path=destination_path,
-            file_options={"content-type": upload_file.content_type, "upsert": True}
+            file_options={"content-type": upload_file.content_type, "upsert": "true"}
         )
 
         public_url = supabase_client.storage.from_(settings.SUPABASE_BUCKET_NAME).get_public_url(destination_path) # Use settings.SUPABASE_BUCKET_NAME
