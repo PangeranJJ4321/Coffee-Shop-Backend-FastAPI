@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, desc, func
 
+from app.models.booking import BookingModel
 from app.models.order import (
     OrderModel, 
     OrderStatus, 
@@ -61,7 +62,7 @@ class OrderService:
             total_price=total_price,
             status=OrderStatus.PENDING,
             ordered_at=datetime.utcnow(),
-            booking_id=order_data.booking_id
+            # booking_id=order_data.booking_id
         )
         db.add(order)
         db.flush()
@@ -84,6 +85,13 @@ class OrderService:
                     variant_id=variant_data.variant_id
                 )
                 db.add(order_item_variant)
+
+        if order_data.booking_id:
+            booking = db.query(BookingModel).filter(BookingModel.id == order_data.booking_id).first()
+            if booking:
+                booking.order_id = order.id 
+            else:
+                pass 
         
         db.commit()
         db.refresh(order)
