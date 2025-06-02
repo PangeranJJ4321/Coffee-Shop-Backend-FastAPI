@@ -26,7 +26,6 @@ def upgrade():
     single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
 
     # Insert operating hours
-    # Do NOT redefine the table here. Assume it already exists from a previous migration.
     days = [e.value for e in WeekDay]
     operating_hours_data = []
     for day in days:
@@ -40,17 +39,16 @@ def upgrade():
             "SUNDAY": (9, 20),
         }[day]
         operating_hours_data.append({
-            'id': uuid4(),
-            'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
+            'id': str(uuid4()),
+            'coffee_shop_id': str(UUID(single_coffee_shop_id)),
             'day': day,
-            'opening_time': time(opening, 0),
-            'closing_time': time(closing, 0),
+            'opening_time': time(opening, 0).strftime("%H:%M:%S"),
+            'closing_time': time(closing, 0).strftime("%H:%M:%S"),
             'is_open': True,
             'created_at': datetime.utcnow(),
             'updated_at': datetime.utcnow(),
         })
 
-    # Use a connection to bulk insert
     conn = op.get_bind()
     for data in operating_hours_data:
         conn.execute(
@@ -62,14 +60,13 @@ def upgrade():
         )
 
     # Insert time slots
-    # Do NOT redefine the table here. Assume it already exists.
     time_slots_data = []
     for h in range(7, 23):
         time_slots_data.append({
-            'id': uuid4(),
-            'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
-            'start_time': time(h, 0),
-            'end_time': time(h + 1, 0),
+            'id': str(uuid4()),
+            'coffee_shop_id': str(UUID(single_coffee_shop_id)),
+            'start_time': time(h, 0).strftime("%H:%M:%S"),
+            'end_time': time(h + 1, 0).strftime("%H:%M:%S"),
             'max_capacity': 15,
             'is_active': True,
             'created_at': datetime.utcnow(),
@@ -77,17 +74,16 @@ def upgrade():
         })
         if h < 22:
             time_slots_data.append({
-                'id': uuid4(),
-                'coffee_shop_id': UUID(single_coffee_shop_id), # Ensure UUID object for insertion
-                'start_time': time(h, 30),
-                'end_time': time(h + 1, 30),
+                'id': str(uuid4()),
+                'coffee_shop_id': str(UUID(single_coffee_shop_id)),
+                'start_time': time(h, 30).strftime("%H:%M:%S"),
+                'end_time': time(h + 1, 30).strftime("%H:%M:%S"),
                 'max_capacity': 10,
                 'is_active': True,
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow(),
             })
 
-    # Use a connection to bulk insert
     for data in time_slots_data:
         conn.execute(
             sa.text(
@@ -103,6 +99,3 @@ def downgrade():
     conn = op.get_bind()
     conn.execute(sa.text(f"DELETE FROM time_slots WHERE coffee_shop_id = '{single_coffee_shop_id}'"))
     conn.execute(sa.text(f"DELETE FROM operating_hours WHERE coffee_shop_id = '{single_coffee_shop_id}'"))
-    
-    # Optional:
-    # conn.execute(sa.text("DELETE FROM coffee_shops WHERE id = :id"), {"id": str(single_coffee_shop_id)})
