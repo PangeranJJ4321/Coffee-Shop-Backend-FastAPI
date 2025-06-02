@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: str
     SUPABASE_BUCKET_NAME: str = "coffee-images"
 
+    BASE_URL: str
+
     class Config:
         env_file = ".env"
         case_sensitive = True
