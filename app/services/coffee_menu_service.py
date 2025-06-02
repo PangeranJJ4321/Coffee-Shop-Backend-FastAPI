@@ -46,7 +46,7 @@ class CoffeeMenuService:
         processed_image_url = None
         if image_file:
             # Save the uploaded file to Supabase Storage and get its public URL
-            image_url = await upload_file_to_supabase(image_file, subdirectory="coffee_menu_images")
+            processed_image_url = await upload_file_to_supabase(image_file, subdirectory="coffee_menu_images")
 
         # Create new coffee menu item
         db_coffee_menu = CoffeeMenuModel(
