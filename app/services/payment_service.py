@@ -6,7 +6,7 @@ import json
 import hashlib
 import requests
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List # Tambahkan List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -15,7 +15,12 @@ from app.core.config import settings
 from app.models.order import OrderModel, OrderStatus, TransactionModel, StatusType
 from app.models.user import UserModel
 from app.models.notification import NotificationModel
-from app.schemas.payment_schema import PaymentRequest, PayForOthersRequest
+from app.schemas.payment_schema import ( # Impor skema yang diperbarui
+    PaymentRequest, 
+    PaymentResponse, 
+    PayForOthersRequest, 
+    PayForOthersResponse
+)
 
 
 # Set up logging
@@ -37,6 +42,62 @@ class PaymentService:
         base64_auth = base64_bytes.decode("ascii")
         return {"Authorization": f"Basic {base64_auth}"}
     
+    def _process_midtrans_response_data(
+        self, 
+        order_id: uuid.UUID, 
+        order_total_price: int, 
+        payment_type: str, 
+        midtrans_response: Dict[str, Any], 
+        transaction_time: datetime, 
+        expiry_time: datetime, 
+        # Parameter opsional untuk PayForOthersResponse
+        original_order_user_name: Optional[str] = None, 
+        original_order_user_email: Optional[str] = None, 
+        paid_by_user_name: Optional[str] = None, 
+        note: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Helper function to extract relevant data from Midtrans response
+        and format it for PaymentResponse or PayForOthersResponse.
+        """
+        payment_url = midtrans_response.get("redirect_url", "")
+        token = midtrans_response.get("token", None)
+        va_numbers = midtrans_response.get("va_numbers", None)
+        actions = midtrans_response.get("actions", None) # Ini untuk GoPay (QR, deeplink)
+        
+        qr_code_url = None
+        if actions:
+            for action in actions:
+                # Midtrans GoPay QR action name might be "generate_qr_code" or similar
+                # You might need to inspect actual Midtrans response for exact name/type
+                if action.get("name") == "generate_qr_code" and action.get("url"):
+                    qr_code_url = action.get("url")
+                    break
+                # Or for deeplink: if action.get("name") == "deeplink_redirect" and action.get("url"):
+
+        response_data = {
+            "order_id": order_id,
+            "transaction_id": midtrans_response.get("transaction_id", midtrans_response.get("order_id")), # Fallback to order_id if transaction_id not present
+            "gross_amount": order_total_price,
+            "payment_type": payment_type,
+            "transaction_time": transaction_time,
+            "expiry_time": expiry_time,
+            "payment_url": payment_url,
+            "token": token,
+            "va_numbers": va_numbers,
+            "actions": actions, 
+            "qr_code_url": qr_code_url
+        }
+
+        if original_order_user_name and original_order_user_email and paid_by_user_name:
+            response_data.update({
+                "original_order_user_name": original_order_user_name,
+                "original_order_user_email": original_order_user_email,
+                "paid_by_user_name": paid_by_user_name,
+                "note": note
+            })
+        return response_data
+
     def get_order_payment_info(self, db: Session, order_id: uuid.UUID):
         """Get order information for payment processing"""
         order = db.query(OrderModel).filter(
@@ -110,7 +171,8 @@ class PaymentService:
             )
         
         # Generate transaction ID with special prefix for pay-for-others
-        transaction_id = f"PFO-{uuid.uuid4().hex[:8].upper()}"
+        # This is for our internal DB, Midtrans will generate its own
+        transaction_id_db = f"PFO-{uuid.uuid4().hex[:8].upper()}" 
         
         # Set expiry time (24 hours from now)
         expiry_time = datetime.utcnow() + timedelta(hours=24)
@@ -145,14 +207,14 @@ class PaymentService:
         # Handle different payment methods
         payment_type = payment_data.payment_method
         if payment_type == "credit_card":
-            endpoint = f"{self.api_base_url}/v2/token"
+            endpoint = f"{self.api_base_url}/v2/token" # For Snap API token
         elif payment_type == "bank_transfer":
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = "bank_transfer"
             payload["bank_transfer"] = {
-                "bank": "bca"  # Default to BCA, could be parameterized
+                "bank": "bca"  # Default to BCA, could be parameterized (e.g., from payment_data)
             }
-        else:
+        else: # For other payment types like gopay, shopeepay etc.
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = payment_type
         
@@ -167,9 +229,9 @@ class PaymentService:
                 data=json.dumps(payload)
             )
             response.raise_for_status()
-            payment_response = response.json()
+            midtrans_response = response.json()
             
-            logger.info(f"Pay for others payment request created: {payment_response}")
+            logger.info(f"Pay for others payment request created: {midtrans_response}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Payment gateway error: {str(e)}")
             raise HTTPException(
@@ -179,12 +241,13 @@ class PaymentService:
         
         # Save transaction to database
         transaction = TransactionModel(
-            transaction_id=transaction_id,
+            transaction_id=midtrans_response.get("transaction_id", transaction_id_db), # Use Midtrans ID if available, else our internal ID
             order_id=order.id,
             gross_amount=order.total_price,
             status=StatusType.PENDING,
             transaction_time=datetime.utcnow(),
-            expiry_time=expiry_time
+            expiry_time=expiry_time,
+            payment_type=payment_type # Store payment_type in transaction model
         )
         db.add(transaction)
         
@@ -218,22 +281,22 @@ class PaymentService:
         db.commit()
         db.refresh(transaction)
         
-        # Prepare response
-        return {
-            "order_id": order.id,
-            "transaction_id": transaction_id,
-            "gross_amount": order.total_price,
-            "payment_type": payment_type,
-            "transaction_time": transaction.transaction_time,
-            "expiry_time": transaction.expiry_time,
-            "payment_url": payment_response.get("redirect_url", ""),
-            "token": payment_response.get("token", None),
-            "original_order_user_name": order.user.name,
-            "original_order_user_email": order.user.email,
-            "paid_by_user_name": payer_user.name,
-            "note": payment_data.note
-        }
-    
+        # Prepare response using the helper
+        response_data = self._process_midtrans_response_data(
+            order_id=order.id,
+            order_total_price=order.total_price,
+            payment_type=payment_type,
+            midtrans_response=midtrans_response,
+            transaction_time=transaction.transaction_time,
+            expiry_time=transaction.expiry_time,
+            original_order_user_name=order.user.name,
+            original_order_user_email=order.user.email,
+            paid_by_user_name=payer_user.name,
+            note=payment_data.note
+        )
+        return PayForOthersResponse(**response_data) # Cast to PayForOthersResponse
+
+
     def create_payment(self, db: Session, payment_data: PaymentRequest, user_id: uuid.UUID):
         """Create a payment transaction for an order with Midtrans"""
         # Get the order
@@ -257,8 +320,8 @@ class PaymentService:
                 detail=f"This order is already being paid by {payer_user.name if payer_user else 'someone else'}"
             )
         
-        # Generate transaction ID
-        transaction_id = f"TRX-{uuid.uuid4().hex[:8].upper()}"
+        # Generate transaction ID for our internal DB
+        transaction_id_db = f"TRX-{uuid.uuid4().hex[:8].upper()}"
         
         # Set expiry time (24 hours from now)
         expiry_time = datetime.utcnow() + timedelta(hours=24)
@@ -311,9 +374,9 @@ class PaymentService:
                 data=json.dumps(payload)
             )
             response.raise_for_status()
-            payment_response = response.json()
+            midtrans_response = response.json()
             
-            logger.info(f"Payment request created: {payment_response}")
+            logger.info(f"Payment request created: {midtrans_response}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Payment gateway error: {str(e)}")
             raise HTTPException(
@@ -323,12 +386,13 @@ class PaymentService:
         
         # Save transaction to database
         transaction = TransactionModel(
-            transaction_id=transaction_id,
+            transaction_id=midtrans_response.get("transaction_id", transaction_id_db), # Use Midtrans ID if available
             order_id=order.id,
             gross_amount=order.total_price,
             status=StatusType.PENDING,
             transaction_time=datetime.utcnow(),
-            expiry_time=expiry_time
+            expiry_time=expiry_time,
+            payment_type=payment_type # Store payment_type in transaction model
         )
         db.add(transaction)
         
@@ -348,17 +412,16 @@ class PaymentService:
         db.commit()
         db.refresh(transaction)
         
-        # Prepare response
-        return {
-            "order_id": order.id,
-            "transaction_id": transaction_id,
-            "gross_amount": order.total_price,
-            "payment_type": payment_type,
-            "transaction_time": transaction.transaction_time,
-            "expiry_time": transaction.expiry_time,
-            "payment_url": payment_response.get("redirect_url", ""),
-            "token": payment_response.get("token", None)
-        }
+        # Prepare response using the helper
+        response_data = self._process_midtrans_response_data(
+            order_id=order.id,
+            order_total_price=order.total_price,
+            payment_type=payment_type,
+            midtrans_response=midtrans_response,
+            transaction_time=transaction.transaction_time,
+            expiry_time=transaction.expiry_time
+        )
+        return PaymentResponse(**response_data) # Cast to PaymentResponse
     
     def check_payment_status(self, db: Session, order_id: uuid.UUID, user_id: uuid.UUID):
         """Check the status of a payment for an order"""
@@ -484,7 +547,7 @@ class PaymentService:
             "order_id": order.id,
             "transaction_id": transaction.transaction_id,
             "status": transaction.status,
-            "payment_type": "bank_transfer",  # This should ideally be stored in the transaction model
+            "payment_type": transaction.payment_type, # Ambil dari transaction model
             "transaction_time": transaction.transaction_time,
             "gross_amount": transaction.gross_amount,
             "payment_time": transaction.payment_time,

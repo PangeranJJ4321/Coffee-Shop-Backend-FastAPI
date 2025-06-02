@@ -1,7 +1,7 @@
 """
 Schemas for payment processing
 """
-from typing import Optional
+from typing import Optional, List, Dict, Any # Tambahkan List, Dict, Any
 from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -27,6 +27,12 @@ class PaymentResponse(BaseModel):
     expiry_time: datetime
     payment_url: str
     token: Optional[str] = None
+    
+    # --- Field tambahan untuk detail pembayaran spesifik ---
+    va_numbers: Optional[List[Dict[str, str]]] = None # Untuk Bank Transfer (Virtual Account)
+    actions: Optional[List[Dict[str, Any]]] = None    # Untuk E-Wallet (misalnya, GoPay QR/deeplink)
+    qr_code_url: Optional[str] = None                 # Opsional, jika Anda ingin langsung URL QR dari actions
+    # -----------------------------------------------------
 
 class PayForOthersResponse(BaseModel):
     """Response for pay for others payment"""
@@ -42,6 +48,12 @@ class PayForOthersResponse(BaseModel):
     original_order_user_email: str
     paid_by_user_name: str
     note: Optional[str] = None
+    
+    # --- Field tambahan untuk detail pembayaran spesifik (juga untuk pay for others) ---
+    va_numbers: Optional[List[Dict[str, str]]] = None
+    actions: Optional[List[Dict[str, Any]]] = None
+    qr_code_url: Optional[str] = None
+    # ---------------------------------------------------------------------------------
 
 class PaymentStatusResponse(BaseModel):
     order_id: UUID
@@ -67,3 +79,4 @@ class OrderPaymentInfoResponse(BaseModel):
     paid_by_user_id: Optional[UUID] = None
     paid_by_user_name: Optional[str] = None
     can_be_paid_by_others: bool
+
