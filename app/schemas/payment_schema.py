@@ -32,6 +32,7 @@ class PaymentResponse(BaseModel):
     va_numbers: Optional[List[Dict[str, str]]] = None # Untuk Bank Transfer (Virtual Account)
     actions: Optional[List[Dict[str, Any]]] = None    # Untuk E-Wallet (misalnya, GoPay QR/deeplink)
     qr_code_url: Optional[str] = None                 # Opsional, jika Anda ingin langsung URL QR dari actions
+    deeplink_url: Optional[str] = None
     # -----------------------------------------------------
 
 class PayForOthersResponse(BaseModel):
