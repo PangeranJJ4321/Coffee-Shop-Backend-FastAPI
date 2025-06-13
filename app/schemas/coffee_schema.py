@@ -164,6 +164,5 @@ class CoffeeFilter(BaseModel):
     rating: Optional[int] = None  # Minimum rating to filter by (1-5)
 
 class RatingCreate(BaseModel):
-    """Schema for creating a rating"""
     rating: int = Field(..., ge=1, le=5)
     review: Optional[str] = None

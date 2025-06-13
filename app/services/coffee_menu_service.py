@@ -405,7 +405,7 @@ class CoffeeMenuService:
                 is_available=coffee_menu.is_available,
                 rating_average=float(avg_rating) if avg_rating else None,
                 rating_count=rating_count,
-                is_favorite=True,  # It's a favorite since we're querying favorites
+                is_favorite=True,  
                 coffee_shop_id=coffee_menu.coffee_shop_id,
                 coffee_shop_name=coffee_shop_name
             )
@@ -413,9 +413,8 @@ class CoffeeMenuService:
 
         return favorite_items
 
-    def add_rating(self, db: Session, coffee_id: UUID, user_id: UUID, rating: RatingCreate) -> bool:
-        """Add or update rating for a coffee item"""
-        # Check if coffee exists
+    def add_rating(self, db: Session, coffee_id: UUID, user_id: UUID, rating_data: RatingCreate) -> bool: # <-- Ganti 'rating' menjadi 'rating_data' untuk kejelasan
+        # Check if coffee exists and is available
         coffee = db.query(CoffeeMenuModel).filter(
             CoffeeMenuModel.id == coffee_id,
             CoffeeMenuModel.is_available == True
@@ -432,20 +431,39 @@ class CoffeeMenuService:
 
         if existing_rating:
             # Update existing rating
-            existing_rating.rating = rating.rating
-            existing_rating.review = rating.review
+            existing_rating.rating = rating_data.rating 
+            existing_rating.review = rating_data.review 
+            db.add(existing_rating) # Add to session to mark as modified
         else:
             # Create new rating
             new_rating = RatingModel(
                 user_id=user_id,
                 coffee_id=coffee_id,
-                rating=rating.rating,
-                review=rating.review
+                rating=rating_data.rating,  
+                review=rating_data.review 
             )
-            db.add(new_rating)
+            db.add(new_rating) 
 
-        db.commit()
+        # Recalculate average rating and total ratings for the coffee item
+        all_ratings_for_coffee = db.query(RatingModel).filter(RatingModel.coffee_id == coffee_id).all()
+        
+        total_scores = sum(r.rating for r in all_ratings_for_coffee)
+        total_ratings_count = len(all_ratings_for_coffee)
+
+        if total_ratings_count > 0:
+            coffee.average_rating = total_scores / total_ratings_count
+        else:
+            coffee.average_rating = 0.0 # No ratings, average is 0
+        coffee.total_ratings = total_ratings_count
+        
+        db.add(coffee) 
+        db.commit() 
+
+        db.refresh(coffee)
+        if existing_rating:
+            db.refresh(existing_rating)
+        
         return True
-
+    
 # Create service instance to be used in routes
 coffee_menu_service = CoffeeMenuService(None)

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str
     SUPABASE_BUCKET_NAME: str = "coffee-images"
+    SUPABASE_ANON_KEY: str
 
     BASE_URL: str
 

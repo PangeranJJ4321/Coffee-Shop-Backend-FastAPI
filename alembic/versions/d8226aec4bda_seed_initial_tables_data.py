@@ -31,7 +31,7 @@ tables_table = sa.Table(
     sa.Column('updated_at', sa.DateTime, nullable=False),
 )
 
-COFFEE_SHOP_ID = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
+COFFEE_SHOP_ID = 'ed634a6f-c12d-4ed4-8975-1926a2ee4a43'
 
 def upgrade():
     tables_to_insert = []

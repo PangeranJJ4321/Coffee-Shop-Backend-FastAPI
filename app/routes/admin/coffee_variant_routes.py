@@ -25,7 +25,7 @@ def get_coffee_variants(
     coffee_id: Optional[UUID] = None,
     variant_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_admin_user)
+    # current_user: dict = Depends(get_current_admin_user)
 ):
     """Get all coffee-variant connections (Admin only)"""
     controller = CoffeeVariantController(db)

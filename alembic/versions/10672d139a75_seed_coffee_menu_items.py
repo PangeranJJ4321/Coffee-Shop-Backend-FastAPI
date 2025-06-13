@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Sequence, Union
 import uuid
 
-from alembic import op
+from alembic import op 
 import sqlalchemy as sa
 from sqlalchemy.sql import table, column
 from sqlalchemy.dialects.postgresql import UUID
@@ -47,14 +47,14 @@ coffee_variants_table = table(
 
 def upgrade():
     now = datetime.utcnow()
-    coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
+    coffee_shop_id = 'ed634a6f-c12d-4ed4-8975-1926a2ee4a43'
 
     # Default variant IDs
     variant_ids = {
-        'Small': '8bb51852-76cf-4ce4-9acf-c38bc34aa392',
-        'No Sugar': '6343f654-1232-47bc-9930-cad97f37c02f',
-        'Regular Milk': '8eee9366-cf80-4aee-9f85-dc030955622a',
-        'Hot': '10ead29f-6c56-4e14-8773-bd091daa5389'
+        'Small': '6318fdae-4ae7-403c-a978-40bf550b7f0c',
+        'No Sugar': '20b2b4de-2ff4-485e-8de3-1de47baccdfa',
+        'Regular Milk': '805d683f-6da1-4b16-b960-4c83b50438a0',
+        'Hot': '6efc7366-4924-4786-bb39-02b62627ac07'
     }
 
     menus = [
