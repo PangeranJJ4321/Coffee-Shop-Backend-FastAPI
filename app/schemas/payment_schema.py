@@ -25,7 +25,7 @@ class PaymentResponse(BaseModel):
     payment_type: str
     transaction_time: datetime
     expiry_time: datetime
-    payment_url: str
+    payment_url:  Optional[str] = None
     token: Optional[str] = None
     
     # --- Field tambahan untuk detail pembayaran spesifik ---

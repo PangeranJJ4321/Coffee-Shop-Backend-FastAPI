@@ -3,6 +3,7 @@
 """
 Routes for payment processing with Midtrans, including pay for others feature
 """
+import json
 from typing import Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response, Body
@@ -19,6 +20,7 @@ from app.schemas.payment_schema import (
     PayForOthersResponse,
     OrderPaymentInfoResponse
 )
+from app.services.auth_services import AuthService
 from app.services.payment_service import payment_service
 from app.utils.security import get_current_user
 
@@ -172,3 +174,14 @@ async def payment_error(
     # You might want to redirect to a payment retry page
     # This is just a simple response for now
     return {"message": "There was an issue with your payment. Please try again."}
+
+@router.get("/{order_id}/transaction-details", response_model=PaymentResponse)
+def get_transaction_details_api(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    transaction_details = payment_service.get_transaction_details(db, order_id, current_user.id) # cite: payment_service.py
+    if not transaction_details:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction details not found for this order.")
+    return transaction_details

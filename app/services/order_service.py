@@ -12,7 +12,7 @@ from app.models.order import (
     OrderItemModel, 
     OrderItemVariantModel
 )
-from app.models.coffee import CoffeeMenuModel, VariantModel, VariantTypeModel, CoffeeShopModel
+from app.models.coffee import CoffeeMenuModel, CoffeeVariantModel, VariantModel, VariantTypeModel, CoffeeShopModel
 from app.models.user import UserModel
 from app.schemas.order_schema import OrderCreate, OrderFilterParams
 
@@ -68,6 +68,11 @@ class OrderService:
             total_price=total_price,
             status=OrderStatus.PENDING,
             ordered_at=datetime.utcnow(),
+            delivery_method=order_data.delivery_info.delivery_method,
+            recipient_name=order_data.delivery_info.name, 
+            recipient_phone_number=order_data.delivery_info.phone_number, 
+            delivery_address=order_data.delivery_info.address if order_data.delivery_info.delivery_method == 'delivery' else None, # Tambahkan ini
+            order_notes=order_data.delivery_info.notes 
             # booking_id=order_data.booking_id # Ini harusnya di set di tempat lain jika booking_id ada
         )
         db.add(order)
@@ -112,7 +117,9 @@ class OrderService:
             )
         ).options(
             joinedload(OrderModel.user),
-            joinedload(OrderModel.paid_by_user)
+            joinedload(OrderModel.paid_by_user),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.variants).joinedload(OrderItemVariantModel.variant).joinedload(VariantModel.variant_type)
         )
         
         # Apply filters
@@ -140,8 +147,19 @@ class OrderService:
         
         # Enrich with paid_by_user_name
         for order in orders:
-            # Perlu dipastikan relasi user dan paid_by_user sudah di-load
-            pass # joinedload sudah menangani ini
+            for item in order.order_items:
+                # Ini diperlukan jika OrderItemResponse.coffee_name Anda tidak otomatis dipetakan dari item.coffee.name
+                item.coffee_name = item.coffee.name # Menarik nama dari objek coffee yang dimuat
+
+                # Tidak perlu mengatur item.coffee.image_url, item.coffee.description, item.coffee.price di sini,
+                # karena `from_attributes = True` di CoffeeMenuResponseForOrderItem akan mengambilnya langsung
+                # dari objek `item.coffee` (yang adalah `CoffeeMenuModel`) yang sudah di-load.
+
+                for variant_item in item.variants:
+                    variant = variant_item.variant
+                    variant_item.name = variant.name
+                    variant_item.variant_type = variant.variant_type.name
+                    variant_item.additional_price = variant.additional_price
         
         return orders
 
@@ -241,7 +259,10 @@ class OrderService:
         for item in order.order_items:
             # coffee sudah di-load dengan joinedload
             item.coffee_name = item.coffee.name
-            
+            item.coffee.image_url = item.coffee.image_url 
+            item.coffee.description = item.coffee.description 
+            item.coffee.price = item.coffee.price
+
             for variant_item in item.variants:
                 variant = variant_item.variant
                 variant_item.name = variant.name
@@ -293,8 +314,8 @@ class OrderService:
 
         # Total amount spent (including paying for others)
         total_spent_query = db.query(func.sum(OrderModel.total_price)).filter(
-            OrderModel.paid_by_user_id == user_id,
-            OrderModel.status == OrderStatus.COMPLETED
+            OrderModel.user_id == user_id,
+            OrderModel.status == OrderStatus.COMPLETED 
         )
         total_spent = total_spent_query.scalar() or 0
 
