@@ -36,8 +36,7 @@ async def create_operating_hours(
 @router.get("/coffee-shops/{coffee_shop_id}/operating-hours", response_model=List[OperatingHours])
 async def get_coffee_shop_operating_hours(
     coffee_shop_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_admin_user)
+    db: Session = Depends(get_db)
 ):
     """Get all operating hours for a coffee shop"""
     return operating_hours_service.get_all_for_coffee_shop(db, coffee_shop_id)

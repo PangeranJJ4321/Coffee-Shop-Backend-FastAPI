@@ -81,7 +81,7 @@ class AuthService:
                 "phone_number": user_data.phone_number,
                 "password_hash": password_hash,
                 "role_id": user_role.id,
-                "is_verified": False  
+                "is_verified": True  
             }
             
             # Create new user
@@ -216,4 +216,21 @@ class AuthService:
         self.user_repository.update_password(user, password_hash)
         self.user_repository.clear_password_reset_token(user)
         
+        return True
+    
+    def change_password(self, user_id: UUID, current_password: str, new_password: str) -> bool:
+        """Change user's password after verifying current password"""
+        user = self.user_repository.get(user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        # Verifikasi password saat ini
+        if not verify_password(current_password, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+
+        # Hash password baru
+        new_password_hash = get_password_hash(new_password)
+
+        # Update password di database
+        self.user_repository.update_password(user, new_password_hash)
         return True

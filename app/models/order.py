@@ -52,13 +52,13 @@ class OrderItemModel(BaseModel):
     
     # Foreign keys
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
-    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menu.id"), nullable=False)
+    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menus.id"),nullable = False)
     
     # Relationships
     order = relationship("OrderModel", back_populates="order_items")
     coffee = relationship("CoffeeMenuModel", back_populates="order_items")
     variants = relationship("OrderItemVariantModel", back_populates="order_item")
-    
+
     def __repr__(self):
         return f"<OrderItem {self.id}>"
 

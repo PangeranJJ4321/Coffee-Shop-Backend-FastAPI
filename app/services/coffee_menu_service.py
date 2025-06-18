@@ -5,7 +5,7 @@ Coffee menu service implementation
 import os
 from typing import List, Optional, Dict
 from uuid import UUID
-from sqlalchemy import func, cast, Float
+from sqlalchemy import func, cast, Float, or_
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status, UploadFile
 import re
@@ -23,7 +23,8 @@ from app.schemas.coffee_schema import (
     CoffeeMenuDetailResponse,
     CoffeeFilter,
     CoffeeVariantDetail,
-    RatingCreate
+    RatingCreate,
+    RatingResponse
 )
 
 class CoffeeMenuService:
@@ -114,8 +115,6 @@ class CoffeeMenuService:
         self.db.delete(coffee)
         self.db.commit()
 
-    # The rest of the methods (get_public_menu, get_coffee_details, add_to_favorites, etc.)
-    # remain the same as they only read the image_url string.
     def get_public_menu(
         self,
         db: Session,
@@ -149,7 +148,6 @@ class CoffeeMenuService:
             RatingModel, CoffeeMenuModel.id == RatingModel.coffee_id
         ).filter(
             CoffeeMenuModel.coffee_shop_id == coffee_shop_id,
-            CoffeeMenuModel.is_available == True
         ).group_by(
             CoffeeMenuModel.id,
             CoffeeShopModel.name
@@ -164,12 +162,28 @@ class CoffeeMenuService:
 
         if filter_params.search:
             search_term = f"%{filter_params.search}%"
-            query = query.filter(CoffeeMenuModel.name.ilike(search_term) |
-                                CoffeeMenuModel.description.ilike(search_term))
+            query = query.filter(
+                or_(
+                    CoffeeMenuModel.name.ilike(search_term),
+                    CoffeeMenuModel.description.ilike(search_term),
+                    # Gunakan ANY untuk mencari di dalam ARRAY
+                    CoffeeMenuModel.tags.any(search_term) if CoffeeMenuModel.tags is not None else False,
+                    CoffeeMenuModel.category.ilike(search_term) if CoffeeMenuModel.category is not None else False
+                )
+            )
 
+        
         if filter_params.rating:
             # Filter by having average rating >= specified rating
             query = query.having(func.avg(RatingModel.rating) >= filter_params.rating)
+
+        if filter_params.category and filter_params.category != 'all':
+            query = query.filter(CoffeeMenuModel.category == filter_params.category)
+        
+        if filter_params.tags:
+            for tag in filter_params.tags:
+                query = query.filter(CoffeeMenuModel.tags.contains([tag]))
+
 
         # Apply sorting
         if filter_params.sort_by == "name":
@@ -202,12 +216,11 @@ class CoffeeMenuService:
         # Prepare response
         coffee_items = []
         for item in results:
-            coffee_menu = item[0]  # CoffeeMenuModel instance
-            avg_rating = item[1]   # Average rating
-            rating_count = item[2] # Rating count
-            coffee_shop_name = item[3] # Coffee shop name
+            coffee_menu = item[0]
+            avg_rating = item[1]
+            rating_count = item[2]
+            coffee_shop_name = item[3]
 
-            # Create response object
             coffee_response = CoffeeMenuPublicResponse(
                 id=coffee_menu.id,
                 name=coffee_menu.name,
@@ -219,7 +232,9 @@ class CoffeeMenuService:
                 rating_count=rating_count,
                 is_favorite=coffee_menu.id in user_favorites,
                 coffee_shop_id=coffee_menu.coffee_shop_id,
-                coffee_shop_name=coffee_shop_name
+                coffee_shop_name=coffee_shop_name,
+                category=coffee_menu.category,
+                tags=coffee_menu.tags
             )
             coffee_items.append(coffee_response)
 
@@ -246,7 +261,6 @@ class CoffeeMenuService:
             RatingModel, CoffeeMenuModel.id == RatingModel.coffee_id
         ).filter(
             CoffeeMenuModel.id == coffee_id,
-            CoffeeMenuModel.is_available == True
         ).group_by(
             CoffeeMenuModel.id,
             CoffeeShopModel.name
@@ -255,12 +269,11 @@ class CoffeeMenuService:
         if not coffee_query:
             return None
 
-        coffee_menu = coffee_query[0]  # CoffeeMenuModel instance
-        avg_rating = coffee_query[1]   # Average rating
-        rating_count = coffee_query[2] # Rating count
-        coffee_shop_name = coffee_query[3] # Coffee shop name
+        coffee_menu = coffee_query[0]
+        avg_rating = coffee_query[1]
+        rating_count = coffee_query[2]
+        coffee_shop_name = coffee_query[3]
 
-        # Check if it's a favorite
         is_favorite = False
         if current_user:
             favorite = db.query(UserFavoriteModel).filter(
@@ -269,7 +282,6 @@ class CoffeeMenuService:
             ).first()
             is_favorite = favorite is not None
 
-        # Get variants
         variants_query = db.query(
             CoffeeVariantModel,
             VariantModel,
@@ -279,11 +291,9 @@ class CoffeeMenuService:
         ).join(
             VariantTypeModel, VariantModel.variant_type_id == VariantTypeModel.id
         ).filter(
-            CoffeeVariantModel.coffee_id == coffee_id,
-            VariantModel.is_available == True
+            CoffeeVariantModel.coffee_id == coffee_id # Tidak perlu is_available == True di sini, biarkan frontend yang memutuskan
         ).all()
 
-        # Organize variants by type
         variants_by_type = {}
         for coffee_variant, variant, variant_type in variants_query:
             if variant_type.name not in variants_by_type:
@@ -301,7 +311,6 @@ class CoffeeMenuService:
             )
             variants_by_type[variant_type.name].append(variant_detail)
 
-        # Create response
         coffee_detail = CoffeeMenuDetailResponse(
             id=coffee_menu.id,
             name=coffee_menu.name,
@@ -314,6 +323,16 @@ class CoffeeMenuService:
             is_favorite=is_favorite,
             coffee_shop_id=coffee_menu.coffee_shop_id,
             coffee_shop_name=coffee_shop_name,
+            
+            # Tambahkan field baru di sini
+            long_description=coffee_menu.long_description,
+            category=coffee_menu.category,
+            tags=coffee_menu.tags,
+            preparation_time=coffee_menu.preparation_time,
+            caffeine_content=coffee_menu.caffeine_content,
+            origin=coffee_menu.origin,
+            roast_level=coffee_menu.roast_level,
+
             variants=variants_by_type
         )
 
@@ -321,32 +340,34 @@ class CoffeeMenuService:
 
     def add_to_favorites(self, db: Session, coffee_id: UUID, user_id: UUID) -> bool:
         """Add a coffee item to user's favorites"""
-        # Check if coffee exists
         coffee = db.query(CoffeeMenuModel).filter(
-            CoffeeMenuModel.id == coffee_id,
-            CoffeeMenuModel.is_available == True
+            CoffeeMenuModel.id == coffee_id
         ).first()
 
         if not coffee:
-            return False
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Coffee menu item not found"
+            )
 
-        # Check if already in favorites
         existing_favorite = db.query(UserFavoriteModel).filter(
             UserFavoriteModel.coffee_id == coffee_id,
             UserFavoriteModel.user_id == user_id
         ).first()
 
         if existing_favorite:
-            return False
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Item already in favorites"
+            )
 
-        # Add to favorites
         favorite = UserFavoriteModel(
             user_id=user_id,
             coffee_id=coffee_id
         )
         db.add(favorite)
         db.commit()
-
+        db.refresh(favorite) # Refresh untuk mendapatkan ID dan created_at
         return True
 
     def remove_from_favorites(self, db: Session, coffee_id: UUID, user_id: UUID) -> bool:
@@ -357,17 +378,19 @@ class CoffeeMenuService:
         ).first()
 
         if not favorite:
-            return False
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Item not found in favorites"
+            )
 
         db.delete(favorite)
         db.commit()
-
         return True
 
     def get_favorites(self, db: Session, user_id: UUID) -> List[CoffeeMenuPublicResponse]:
         """Get all favorite coffee items for a user"""
-        from app.models.coffee import CoffeeShopModel
-
+        # Import CoffeeShopModel jika belum
+        
         favorites = db.query(
             CoffeeMenuModel,
             func.avg(RatingModel.rating).label('avg_rating'),
@@ -380,22 +403,20 @@ class CoffeeMenuService:
         ).outerjoin(
             RatingModel, CoffeeMenuModel.id == RatingModel.coffee_id
         ).filter(
-            UserFavoriteModel.user_id == user_id,
-            CoffeeMenuModel.is_available == True
+            UserFavoriteModel.user_id == user_id
+            # Tidak perlu filter is_available di sini, biarkan frontend yang memutuskan
         ).group_by(
             CoffeeMenuModel.id,
             CoffeeShopModel.name
         ).all()
 
-        # Prepare response
         favorite_items = []
         for item in favorites:
-            coffee_menu = item[0]  # CoffeeMenuModel instance
-            avg_rating = item[1]   # Average rating
-            rating_count = item[2] # Rating count
-            coffee_shop_name = item[3] # Coffee shop name
+            coffee_menu = item[0]
+            avg_rating = item[1]
+            rating_count = item[2]
+            coffee_shop_name = item[3]
 
-            # Create response object
             coffee_response = CoffeeMenuPublicResponse(
                 id=coffee_menu.id,
                 name=coffee_menu.name,
@@ -405,19 +426,20 @@ class CoffeeMenuService:
                 is_available=coffee_menu.is_available,
                 rating_average=float(avg_rating) if avg_rating else None,
                 rating_count=rating_count,
-                is_favorite=True,  
+                is_favorite=True, # Karena ini daftar favorit, pasti true
                 coffee_shop_id=coffee_menu.coffee_shop_id,
-                coffee_shop_name=coffee_shop_name
+                coffee_shop_name=coffee_shop_name,
+                category=coffee_menu.category,
+                tags=coffee_menu.tags
             )
             favorite_items.append(coffee_response)
 
         return favorite_items
-
-    def add_rating(self, db: Session, coffee_id: UUID, user_id: UUID, rating_data: RatingCreate) -> bool: # <-- Ganti 'rating' menjadi 'rating_data' untuk kejelasan
+    
+    def add_rating(self, db: Session, coffee_id: UUID, user_id: UUID, rating_data: RatingCreate) -> bool:
         # Check if coffee exists and is available
         coffee = db.query(CoffeeMenuModel).filter(
-            CoffeeMenuModel.id == coffee_id,
-            CoffeeMenuModel.is_available == True
+            CoffeeMenuModel.id == coffee_id
         ).first()
 
         if not coffee:
@@ -431,20 +453,23 @@ class CoffeeMenuService:
 
         if existing_rating:
             # Update existing rating
-            existing_rating.rating = rating_data.rating 
-            existing_rating.review = rating_data.review 
-            db.add(existing_rating) # Add to session to mark as modified
+            existing_rating.rating = rating_data.rating
+            existing_rating.review = rating_data.review
+            db.add(existing_rating)
         else:
             # Create new rating
             new_rating = RatingModel(
                 user_id=user_id,
                 coffee_id=coffee_id,
-                rating=rating_data.rating,  
-                review=rating_data.review 
+                rating=rating_data.rating,
+                review=rating_data.review
             )
-            db.add(new_rating) 
+            db.add(new_rating)
 
         # Recalculate average rating and total ratings for the coffee item
+        # Ini akan di-trigger secara otomatis oleh database hook atau trigger jika ada,
+        # atau harus dipanggil secara eksplisit di sini.
+        # Untuk kepastian, kita hitung ulang dan update langsung modelnya.
         all_ratings_for_coffee = db.query(RatingModel).filter(RatingModel.coffee_id == coffee_id).all()
         
         total_scores = sum(r.rating for r in all_ratings_for_coffee)
@@ -456,8 +481,8 @@ class CoffeeMenuService:
             coffee.average_rating = 0.0 # No ratings, average is 0
         coffee.total_ratings = total_ratings_count
         
-        db.add(coffee) 
-        db.commit() 
+        db.add(coffee)
+        db.commit()
 
         db.refresh(coffee)
         if existing_rating:
@@ -465,5 +490,26 @@ class CoffeeMenuService:
         
         return True
     
-# Create service instance to be used in routes
+    def get_coffee_reviews(self, db: Session, coffee_id: UUID) -> List[RatingResponse]:
+        """Get all reviews for a specific coffee item"""
+        from sqlalchemy.orm import joinedload
+
+        reviews_query = db.query(RatingModel).options(
+            joinedload(RatingModel.user) # Eager load user untuk mendapatkan nama
+        ).filter(
+            RatingModel.coffee_id == coffee_id
+        ).order_by(RatingModel.created_at.desc()).all()
+
+        return [
+            RatingResponse(
+                id=review.id,
+                user_name=review.user.name, 
+                rating=review.rating,
+                review=review.review,
+                created_at=review.created_at
+            )
+            for review in reviews_query
+        ]
+
+
 coffee_menu_service = CoffeeMenuService(None)

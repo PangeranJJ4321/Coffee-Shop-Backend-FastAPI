@@ -94,7 +94,7 @@ def upgrade():
         )
 
 def downgrade():
-    single_coffee_shop_id = '8dede67b-7f3c-4c30-9a05-544f8f093bd5'
+    single_coffee_shop_id = 'ed634a6f-c12d-4ed4-8975-1926a2ee4a43'
 
     conn = op.get_bind()
     conn.execute(sa.text(f"DELETE FROM time_slots WHERE coffee_shop_id = '{single_coffee_shop_id}'"))

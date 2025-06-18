@@ -51,7 +51,6 @@ async def delete_coffee_shop(
 async def get_all_coffee_shops(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, le=200),
-    current_user: Optional[UserModel] = Depends(get_current_user), # Bisa diakses user atau bahkan guest
     service: CoffeeShopService = Depends(get_coffee_shop_service) # <-- Inject service
 ):
     """Get all registered coffee shops"""
@@ -60,7 +59,6 @@ async def get_all_coffee_shops(
 @router.get("/{coffee_shop_id}", response_model=CoffeeShopResponse)
 async def get_coffee_shop_by_id(
     coffee_shop_id: UUID,
-    current_user: Optional[UserModel] = Depends(get_current_user), 
     service: CoffeeShopService = Depends(get_coffee_shop_service) 
 ):
     """Get a coffee shop by ID"""

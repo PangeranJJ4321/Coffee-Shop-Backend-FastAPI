@@ -1,10 +1,11 @@
+from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import UserModel
-from app.schemas.coffee_schema import RatingCreate 
+from app.schemas.coffee_schema import RatingCreate, RatingResponse 
 from app.services.coffee_menu_service import coffee_menu_service
 from app.utils.security import get_current_user
 
@@ -25,3 +26,14 @@ async def rate_coffee(
             detail="Coffee menu item not found or not available"
         )
     return {"detail": "Rating submitted successfully"}
+
+@router.get("/coffee/{coffee_id}", response_model=List[RatingResponse]) 
+async def get_coffee_reviews(
+    coffee_id: UUID,
+    db: Session = Depends(get_db)
+):
+    """Get all reviews for a specific coffee item"""
+    reviews = coffee_menu_service.get_coffee_reviews(db, coffee_id)
+    if not reviews:
+        return []
+    return reviews

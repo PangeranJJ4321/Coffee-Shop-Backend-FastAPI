@@ -15,8 +15,6 @@ def get_user(
     user_id,
     current_user : UserModel,
     user_service : UserService = Depends()
-    
-
 ):
     """Get user by ID (admin can get any user, users can only get themselves)"""
     # Check if user has permission
@@ -38,5 +36,6 @@ def get_user(
         name=user.name,
         email=user.email,
         phone_number=user.phone_number,
-        role=user.role.role
+        role=user.role.role,
+        is_verified=user.is_verified
     )

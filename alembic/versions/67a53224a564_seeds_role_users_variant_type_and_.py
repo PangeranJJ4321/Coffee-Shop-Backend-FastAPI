@@ -1,7 +1,7 @@
 """seeds role users, variant type and variant coffee
 
 Revision ID: 67a53224a564
-Revises: 0408f529d43a
+Revises: 1f79b4d409ba'
 Create Date: 2025-05-29 00:55:39.206534
 
 """
@@ -10,15 +10,14 @@ import uuid
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.sql import table, column, insert
-from sqlalchemy import String, Boolean, Integer, Text
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
+from sqlalchemy.sql import table, column
+from sqlalchemy import String, Boolean, Integer, Text, DateTime # Import DateTime jika belum
+from sqlalchemy.dialects.postgresql import UUID # Import UUID jika belum
 
 
 # revision identifiers, used by Alembic.
 revision: str = '67a53224a564'
-down_revision: Union[str, None] = '0408f529d43a'
+down_revision: Union[str, None] = '1f79b4d409ba'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -37,7 +36,7 @@ def upgrade():
     variant_types_table = table('variant_types',
         column('id', UUID),
         column('name', String),
-        column('description', Text),
+        column('description', Text), 
         column('is_required', Boolean),
         column('created_at', sa.DateTime),
         column('updated_at', sa.DateTime)
@@ -58,15 +57,19 @@ def upgrade():
     now = datetime.utcnow()
     
     # Seed Roles
+    # Tambahkan Role USER
+    admin_role_id = str(uuid.uuid4())
+    guest_role_id = str(uuid.uuid4())
+
     roles_data = [
         {
-            'id': str(uuid.uuid4()),
+            'id': admin_role_id,
             'role': 'ADMIN',
             'created_at': now,
             'updated_at': now
         },
         {
-            'id': str(uuid.uuid4()),
+            'id': guest_role_id,
             'role': 'GUEST',
             'created_at': now,
             'updated_at': now
@@ -76,73 +79,48 @@ def upgrade():
     op.bulk_insert(roles_table, roles_data)
     
     # Seed Variant Types and Variants
+    size_type_id = str(uuid.uuid4())
+    sugar_type_id = str(uuid.uuid4())
+    milk_type_id = str(uuid.uuid4())
+    temp_type_id = str(uuid.uuid4())
+
     variant_types_data = [
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Size',
-            'description': 'Coffee size options',
-            'is_required': True,
-            'created_at': now,
-            'updated_at': now
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Sugar Level',
-            'description': 'Sugar level preferences',
-            'is_required': False,
-            'created_at': now,
-            'updated_at': now
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Milk Type',
-            'description': 'Type of milk',
-            'is_required': False,
-            'created_at': now,
-            'updated_at': now
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Temperature',
-            'description': 'Drink temperature',
-            'is_required': True,
-            'created_at': now,
-            'updated_at': now
-        }
+        { 'id': size_type_id, 'name': 'Size', 'description': 'Ukuran minuman', 'is_required': True, 'created_at': now, 'updated_at': now },
+        { 'id': sugar_type_id, 'name': 'Sugar Level', 'description': 'Tingkat kemanisan', 'is_required': True, 'created_at': now, 'updated_at': now }, # Umumnya sugar level wajib dipilih
+        { 'id': milk_type_id, 'name': 'Milk Type', 'description': 'Jenis susu', 'is_required': False, 'created_at': now, 'updated_at': now },
+        { 'id': temp_type_id, 'name': 'Temperature', 'description': 'Suhu minuman', 'is_required': True, 'created_at': now, 'updated_at': now }
     ]
     
     op.bulk_insert(variant_types_table, variant_types_data)
     
-    # Get IDs for variant types (we need to use the same IDs we just created)
-    size_id = variant_types_data[0]['id']
-    sugar_id = variant_types_data[1]['id']
-    milk_id = variant_types_data[2]['id']
-    temp_id = variant_types_data[3]['id']
-    
+    # Simpan ID variant types untuk seeding variants
+    # Gunakan dictionary untuk memudahkan akses
+    variant_type_ids_map = {vt['name']: vt['id'] for vt in variant_types_data}
+
     # Seed Variants
     variants_data = [
         # Size variants
-        {'id': str(uuid.uuid4()), 'name': 'Small', 'additional_price': 0, 'is_available': True, 'variant_type_id': size_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Medium', 'additional_price': 3000, 'is_available': True, 'variant_type_id': size_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Large', 'additional_price': 5000, 'is_available': True, 'variant_type_id': size_id, 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Small', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Size'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Medium', 'additional_price': 3000, 'is_available': True, 'variant_type_id': variant_type_ids_map['Size'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Large', 'additional_price': 5000, 'is_available': True, 'variant_type_id': variant_type_ids_map['Size'], 'created_at': now, 'updated_at': now},
         
         # Sugar level variants
-        {'id': str(uuid.uuid4()), 'name': 'No Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': sugar_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Less Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': sugar_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Normal Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': sugar_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Extra Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': sugar_id, 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'No Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Sugar Level'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Less Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Sugar Level'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Normal Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Sugar Level'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Extra Sugar', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Sugar Level'], 'created_at': now, 'updated_at': now},
         
         # Milk type variants
-        {'id': str(uuid.uuid4()), 'name': 'Regular Milk', 'additional_price': 0, 'is_available': True, 'variant_type_id': milk_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Oat Milk', 'additional_price': 5000, 'is_available': True, 'variant_type_id': milk_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Almond Milk', 'additional_price': 5000, 'is_available': True, 'variant_type_id': milk_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Soy Milk', 'additional_price': 3000, 'is_available': True, 'variant_type_id': milk_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'No Milk', 'additional_price': 0, 'is_available': True, 'variant_type_id': milk_id, 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Regular Milk', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Milk Type'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Oat Milk', 'additional_price': 5000, 'is_available': True, 'variant_type_id': variant_type_ids_map['Milk Type'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Almond Milk', 'additional_price': 5000, 'is_available': True, 'variant_type_id': variant_type_ids_map['Milk Type'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Soy Milk', 'additional_price': 3000, 'is_available': True, 'variant_type_id': variant_type_ids_map['Milk Type'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'No Milk', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Milk Type'], 'created_at': now, 'updated_at': now},
         
         # Temperature variants
-        {'id': str(uuid.uuid4()), 'name': 'Hot', 'additional_price': 0, 'is_available': True, 'variant_type_id': temp_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Cold', 'additional_price': 0, 'is_available': True, 'variant_type_id': temp_id, 'created_at': now, 'updated_at': now},
-        {'id': str(uuid.uuid4()), 'name': 'Extra Hot', 'additional_price': 0, 'is_available': True, 'variant_type_id': temp_id, 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Hot', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Temperature'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Cold', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Temperature'], 'created_at': now, 'updated_at': now},
+        {'id': str(uuid.uuid4()), 'name': 'Extra Hot', 'additional_price': 0, 'is_available': True, 'variant_type_id': variant_type_ids_map['Temperature'], 'created_at': now, 'updated_at': now},
     ]
     
     op.bulk_insert(variants_table, variants_data)
@@ -154,4 +132,3 @@ def downgrade():
     op.execute("DELETE FROM variants")
     op.execute("DELETE FROM variant_types")
     op.execute("DELETE FROM roles")
-
