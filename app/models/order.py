@@ -27,6 +27,12 @@ class OrderModel(BaseModel):
     total_price = Column(Integer, nullable=False)
     ordered_at = Column(DateTime, nullable=False)
     payment_note = Column(Text, nullable=True)
+    paid_at = Column(DateTime, nullable=True) 
+    delivery_method = Column(String, nullable=True) 
+    recipient_name = Column(String, nullable=True)
+    recipient_phone_number = Column(String, nullable=True)
+    delivery_address = Column(Text, nullable=True)
+    order_notes = Column(Text, nullable=True)
     
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
@@ -88,6 +94,9 @@ class TransactionModel(BaseModel):
     expiry_time = Column(DateTime, nullable=True)
     transaction_time = Column(DateTime, nullable=False)
     payment_type = Column(String, nullable=False)
+
+    qr_code_url = Column(Text, nullable=True) 
+    deeplink_url = Column(Text, nullable=True) 
     
     # Foreign keys
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)

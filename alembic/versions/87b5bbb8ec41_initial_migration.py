@@ -1,8 +1,8 @@
-"""Fix foreign keys to point to coffee_menus table
+"""Initial migration
 
-Revision ID: f37f3180c679
+Revision ID: 87b5bbb8ec41
 Revises: 
-Create Date: 2025-06-17 21:18:24.646770
+Create Date: 2025-06-18 22:49:34.619402
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'f37f3180c679'
+revision: str = '87b5bbb8ec41'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -170,6 +170,12 @@ def upgrade() -> None:
     sa.Column('total_price', sa.Integer(), nullable=False),
     sa.Column('ordered_at', sa.DateTime(), nullable=False),
     sa.Column('payment_note', sa.Text(), nullable=True),
+    sa.Column('paid_at', sa.DateTime(), nullable=True),
+    sa.Column('delivery_method', sa.String(), nullable=True),
+    sa.Column('recipient_name', sa.String(), nullable=True),
+    sa.Column('recipient_phone_number', sa.String(), nullable=True),
+    sa.Column('delivery_address', sa.Text(), nullable=True),
+    sa.Column('order_notes', sa.Text(), nullable=True),
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('paid_by_user_id', sa.UUID(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -253,6 +259,8 @@ def upgrade() -> None:
     sa.Column('expiry_time', sa.DateTime(), nullable=True),
     sa.Column('transaction_time', sa.DateTime(), nullable=False),
     sa.Column('payment_type', sa.String(), nullable=False),
+    sa.Column('qr_code_url', sa.Text(), nullable=True),
+    sa.Column('deeplink_url', sa.Text(), nullable=True),
     sa.Column('order_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),

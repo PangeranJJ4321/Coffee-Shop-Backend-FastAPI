@@ -145,20 +145,20 @@ class PaymentService:
             OrderModel.id == payment_data.order_id,
             OrderModel.status == OrderStatus.PENDING
         ).first()
-        
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found or not in pending state"
             )
-        
+
         # Check if order is already being paid by someone else
         if order.paid_by_user_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This order is already being paid by someone else"
             )
-        
+
         # Get payer user info
         payer_user = db.query(UserModel).filter(UserModel.id == payer_user_id).first()
         if not payer_user:
@@ -166,36 +166,36 @@ class PaymentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Payer user not found"
             )
-        
+
         # Prevent users from paying for their own orders through this endpoint
         if order.user_id == payer_user_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot use pay-for-others endpoint for your own order. Use regular payment endpoint instead."
             )
-        
+
         # Generate transaction ID with special prefix for pay-for-others
-        # This is for our internal DB, Midtrans will generate its own
-        transaction_id_db = f"PFO-{uuid.uuid4().hex[:8].upper()}" 
-        
+        transaction_id_db = f"PFO-{uuid.uuid4().hex[:8].upper()}"
+
         # Set expiry time (24 hours from now)
         expiry_time = datetime.utcnow() + timedelta(hours=24)
-        
+        transaction_time = datetime.utcnow() # Define transaction_time here
+
         # Create payment payload for Midtrans
         payload = {
             "transaction_details": {
-                "order_id": f"{order.order_id}-PFO-{payer_user_id.hex[:8]}",  # Make unique for pay-for-others
+                "order_id": f"{order.order_id}-PFO-{payer_user_id.hex[:8]}",
                 "gross_amount": order.total_price
             },
             "customer_details": {
-                "first_name": payer_user.name,  # Payer's details
+                "first_name": payer_user.name,
                 "email": payer_user.email,
                 "phone": payer_user.phone_number
             },
             "expiry": {
                 "start_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0700"),
                 "unit": "minutes",
-                "duration": 1440  # 24 hours in minutes
+                "duration": 1440
             },
             "callbacks": {
                 "finish": f"{settings.BASE_URL}/payment/finished",
@@ -207,25 +207,28 @@ class PaymentService:
             "custom_field2": str(order.id),
             "custom_field3": str(payer_user_id)
         }
-        
+
         # Handle different payment methods
         payment_type = payment_data.payment_method
         if payment_type == "credit_card":
-            endpoint = f"{self.api_base_url}/v2/token" # For Snap API token
+            endpoint = f"{self.api_base_url}/v2/token"
         elif payment_type == "bank_transfer":
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = "bank_transfer"
             payload["bank_transfer"] = {
-                "bank": "bca"  # Default to BCA, could be parameterized (e.g., from payment_data)
+                "bank": "bca"
             }
-        else: # For other payment types like gopay, shopeepay etc.
+        else:
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = payment_type
-        
+
         # Make request to Midtrans API
         headers = self._get_auth_header()
         headers["Content-Type"] = "application/json"
-        
+
+        midtrans_response = {}
+        response_data = {}
+
         try:
             response = requests.post(
                 endpoint,
@@ -234,27 +237,44 @@ class PaymentService:
             )
             response.raise_for_status()
             midtrans_response = response.json()
-            
+
             logger.info(f"Pay for others payment request created: {midtrans_response}")
+
+            # Pindahkan panggilan _process_midtrans_response_data ke sini
+            response_data = self._process_midtrans_response_data(
+                order_id=order.id,
+                order_total_price=order.total_price,
+                payment_type=payment_type,
+                midtrans_response=midtrans_response,
+                transaction_time=transaction_time, # Gunakan variabel yang sudah didefinisikan
+                expiry_time=expiry_time, # Gunakan variabel yang sudah didefinisikan
+                original_order_user_name=order.user.name,
+                original_order_user_email=order.user.email,
+                paid_by_user_name=payer_user.name,
+                note=payment_data.note
+            )
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Payment gateway error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Payment gateway error: {str(e)}"
             )
-        
+
         # Save transaction to database
         transaction = TransactionModel(
-            transaction_id=midtrans_response.get("transaction_id", transaction_id_db), # Use Midtrans ID if available, else our internal ID
+            transaction_id=midtrans_response.get("transaction_id", transaction_id_db),
             order_id=order.id,
             gross_amount=order.total_price,
             status=StatusType.PENDING,
-            transaction_time=datetime.utcnow(),
-            expiry_time=expiry_time,
-            payment_type=payment_type # Store payment_type in transaction model
+            transaction_time=transaction_time, # Gunakan variabel yang sudah didefinisikan
+            expiry_time=expiry_time, # Gunakan variabel yang sudah didefinisikan
+            payment_type=payment_type,
+            qr_code_url=response_data.get("qr_code_url"), # Sekarang response_data sudah terisi
+            deeplink_url=response_data.get("deeplink_url") # Sekarang response_data sudah terisi
         )
         db.add(transaction)
-        
+
         # Update order to mark who is paying and set status to PROCESSING
         order.paid_by_user_id = payer_user_id
         order.status = OrderStatus.PROCESSING
@@ -262,7 +282,7 @@ class PaymentService:
             order.payment_note = f"Paid by {payer_user.name}: {payment_data.note}"
         else:
             order.payment_note = f"Paid by {payer_user.name}"
-        
+
         # Create notifications
         # Notification for the original order owner
         notification_original = NotificationModel(
@@ -272,7 +292,7 @@ class PaymentService:
             user_id=order.user_id
         )
         db.add(notification_original)
-        
+
         # Notification for the payer
         notification_payer = NotificationModel(
             type="payment_created",
@@ -281,24 +301,12 @@ class PaymentService:
             user_id=payer_user_id
         )
         db.add(notification_payer)
-        
+
         db.commit()
         db.refresh(transaction)
-        
-        # Prepare response using the helper
-        response_data = self._process_midtrans_response_data(
-            order_id=order.id,
-            order_total_price=order.total_price,
-            payment_type=payment_type,
-            midtrans_response=midtrans_response,
-            transaction_time=transaction.transaction_time,
-            expiry_time=transaction.expiry_time,
-            original_order_user_name=order.user.name,
-            original_order_user_email=order.user.email,
-            paid_by_user_name=payer_user.name,
-            note=payment_data.note
-        )
-        return PayForOthersResponse(**response_data) # Cast to PayForOthersResponse
+
+        # Prepare response using the helper - ini sudah dipindahkan ke atas
+        return PayForOthersResponse(**response_data)
 
 
     def create_payment(self, db: Session, payment_data: PaymentRequest, user_id: uuid.UUID):
@@ -309,13 +317,13 @@ class PaymentService:
             OrderModel.user_id == user_id,
             OrderModel.status == OrderStatus.PENDING
         ).first()
-        
+
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found or not in pending state"
             )
-        
+
         # Check if someone else is already paying for this order
         if order.paid_by_user_id is not None and order.paid_by_user_id != user_id:
             payer_user = db.query(UserModel).filter(UserModel.id == order.paid_by_user_id).first()
@@ -323,13 +331,14 @@ class PaymentService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"This order is already being paid by {payer_user.name if payer_user else 'someone else'}"
             )
-        
+
         # Generate transaction ID for our internal DB
         transaction_id_db = f"TRX-{uuid.uuid4().hex[:8].upper()}"
-        
+
         # Set expiry time (24 hours from now)
         expiry_time = datetime.utcnow() + timedelta(hours=24)
-        
+        transaction_time = datetime.utcnow() # Define transaction_time here
+
         # Create payment payload for Midtrans
         payload = {
             "transaction_details": {
@@ -344,7 +353,7 @@ class PaymentService:
             "expiry": {
                 "start_time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0700"),
                 "unit": "minutes",
-                "duration": 1440  # 24 hours in minutes
+                "duration": 1440
             },
             "callbacks": {
                 "finish": f"{settings.BASE_URL}/payment/finished",
@@ -352,7 +361,7 @@ class PaymentService:
                 "notification": f"{settings.BASE_URL}/payments/notification"
             }
         }
-        
+
         # Handle different payment methods
         payment_type = payment_data.payment_method
         if payment_type == "credit_card":
@@ -361,16 +370,19 @@ class PaymentService:
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = "bank_transfer"
             payload["bank_transfer"] = {
-                "bank": "bca"  # Default to BCA, could be parameterized
+                "bank": "bca"
             }
         else:
             endpoint = f"{self.api_base_url}/v2/charge"
             payload["payment_type"] = payment_type
-        
+
         # Make request to Midtrans API
         headers = self._get_auth_header()
         headers["Content-Type"] = "application/json"
-        
+
+        midtrans_response = {}
+        response_data = {}
+
         try:
             response = requests.post(
                 endpoint,
@@ -379,31 +391,44 @@ class PaymentService:
             )
             response.raise_for_status()
             midtrans_response = response.json()
-            
+
             logger.info(f"Payment request created: {midtrans_response}")
+
+            # Pindahkan panggilan _process_midtrans_response_data ke sini
+            response_data = self._process_midtrans_response_data(
+                order_id=order.id,
+                order_total_price=order.total_price,
+                payment_type=payment_type,
+                midtrans_response=midtrans_response,
+                transaction_time=transaction_time, # Gunakan variabel yang sudah didefinisikan
+                expiry_time=expiry_time # Gunakan variabel yang sudah didefinisikan
+            )
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Payment gateway error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Payment gateway error: {str(e)}"
             )
-        
+
         # Save transaction to database
         transaction = TransactionModel(
-            transaction_id=midtrans_response.get("transaction_id", transaction_id_db), # Use Midtrans ID if available
+            transaction_id=midtrans_response.get("transaction_id", transaction_id_db),
             order_id=order.id,
             gross_amount=order.total_price,
             status=StatusType.PENDING,
-            transaction_time=datetime.utcnow(),
-            expiry_time=expiry_time,
-            payment_type=payment_type # Store payment_type in transaction model
+            transaction_time=transaction_time, # Gunakan variabel yang sudah didefinisikan
+            expiry_time=expiry_time, # Gunakan variabel yang sudah didefinisikan
+            payment_type=payment_type ,
+            qr_code_url=response_data.get("qr_code_url"), # Sekarang response_data sudah terisi
+            deeplink_url=response_data.get("deeplink_url") # Sekarang response_data sudah terisi
         )
         db.add(transaction)
-        
+
         # Update order status to PROCESSING and mark as self-paid
         order.status = OrderStatus.PROCESSING
-        order.paid_by_user_id = user_id  # Mark that owner is paying for their own order
-        
+        order.paid_by_user_id = user_id
+
         # Create a notification for the user
         notification = NotificationModel(
             type="payment_created",
@@ -412,20 +437,12 @@ class PaymentService:
             user_id=user_id
         )
         db.add(notification)
-        
+
         db.commit()
         db.refresh(transaction)
-        
-        # Prepare response using the helper
-        response_data = self._process_midtrans_response_data(
-            order_id=order.id,
-            order_total_price=order.total_price,
-            payment_type=payment_type,
-            midtrans_response=midtrans_response,
-            transaction_time=transaction.transaction_time,
-            expiry_time=transaction.expiry_time
-        )
-        return PaymentResponse(**response_data) # Cast to PaymentResponse
+
+        # Prepare response using the helper - ini sudah dipindahkan ke atas
+        return PaymentResponse(**response_data)
     
     def check_payment_status(self, db: Session, order_id: uuid.UUID, user_id: uuid.UUID):
         """Check the status of a payment for an order"""
@@ -447,11 +464,13 @@ class PaymentService:
         if not transaction:
             return None
         
-        # Get paid by user info
+        # Get paid by user info (untuk pesan notifikasi)
+        # Ambil paid_by_user_id saat ini sebelum diubah jika statusnya gagal/kadaluarsa
+        current_payer_user_id = order.paid_by_user_id
         paid_by_user = None
-        if order.paid_by_user_id:
+        if current_payer_user_id: # Gunakan current_payer_user_id
             paid_by_user = db.query(UserModel).filter(
-                UserModel.id == order.paid_by_user_id
+                UserModel.id == current_payer_user_id
             ).first()
         
         # If the transaction is not in a final state, check with Midtrans
@@ -459,8 +478,8 @@ class PaymentService:
             try:
                 # For pay-for-others transactions, we need to use the modified order_id
                 check_order_id = order.order_id
-                if order.paid_by_user_id and order.paid_by_user_id != order.user_id:
-                    check_order_id = f"{order.order_id}-PFO-{order.paid_by_user_id.hex[:8]}"
+                if current_payer_user_id and current_payer_user_id != order.user_id: # Gunakan current_payer_user_id
+                    check_order_id = f"{order.order_id}-PFO-{current_payer_user_id.hex[:8]}" # Gunakan current_payer_user_id
                 
                 endpoint = f"{self.api_base_url}/v2/{check_order_id}/status"
                 headers = self._get_auth_header()
@@ -476,9 +495,11 @@ class PaymentService:
                     transaction.status = StatusType.SUCCESS
                     transaction.payment_time = datetime.now()
                     order.status = OrderStatus.COMPLETED
+                    order.paid_at = datetime.utcnow()
                     
                     # Create notifications for successful payment
-                    if order.paid_by_user_id != order.user_id:
+                    # Pastikan paid_by_user_id tidak None sebelum digunakan untuk notifikasi
+                    if current_payer_user_id and current_payer_user_id != order.user_id: # Gunakan current_payer_user_id
                         # Pay for others scenario - notify both users
                         notification_original = NotificationModel(
                             type="payment_success",
@@ -492,11 +513,11 @@ class PaymentService:
                             type="payment_success",
                             message=f"Payment for order {order.order_id} (for {order.user.name}) has been completed successfully.",
                             is_read=False,
-                            user_id=order.paid_by_user_id
+                            user_id=current_payer_user_id # <--- FIX: Gunakan variabel sementara
                         )
                         db.add(notification_payer)
                     else:
-                        # Regular payment
+                        # Regular payment (owner pays for self)
                         notification = NotificationModel(
                             type="payment_success",
                             message=f"Payment for order {order.order_id} has been completed successfully.",
@@ -508,10 +529,14 @@ class PaymentService:
                 elif payment_data.get("transaction_status") in ["expire", "cancel", "deny"]:
                     transaction.status = StatusType.FAILED
                     order.status = OrderStatus.CANCELLED
-                    order.paid_by_user_id = None  # Reset the payer
+                    
+                    # *** PENTING: Simpan ID pembayar SEBELUM meresetnya ***
+                    user_who_was_paying_id = order.paid_by_user_id 
+                    order.paid_by_user_id = None  # Reset the payer di order model
                     
                     # Create notifications for failed payment
-                    if order.paid_by_user_id != order.user_id:
+                    # Gunakan user_who_was_paying_id untuk notifikasi pembayar
+                    if user_who_was_paying_id and user_who_was_paying_id != order.user_id: # <--- FIX: Gunakan variabel sementara
                         # Pay for others scenario
                         notification_original = NotificationModel(
                             type="payment_failed",
@@ -525,11 +550,11 @@ class PaymentService:
                             type="payment_failed",
                             message=f"Payment for order {order.order_id} (for {order.user.name}) has failed or been cancelled.",
                             is_read=False,
-                            user_id=order.paid_by_user_id
+                            user_id=user_who_was_paying_id # <--- FIX: Gunakan variabel sementara
                         )
                         db.add(notification_payer)
                     else:
-                        # Regular payment
+                        # Regular payment (owner pays for self) atau skenario lain
                         notification = NotificationModel(
                             type="payment_failed",
                             message=f"Payment for order {order.order_id} has failed or been cancelled.",
@@ -540,10 +565,16 @@ class PaymentService:
                 
                 db.commit()
                 db.refresh(transaction)
+                db.refresh(order)
                 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Error checking payment status: {str(e)}")
                 # In case of API error, return current status from DB
+                db.rollback() # Disarankan untuk rollback jika terjadi exception sebelum commit
+                pass
+            except Exception as e: # Tangani exception lain yang mungkin terjadi saat membuat notifikasi atau lainnya
+                logger.error(f"Error processing payment status update for order {order_id}: {str(e)}")
+                db.rollback()
                 pass
         
         # Return payment status information
@@ -551,11 +582,11 @@ class PaymentService:
             "order_id": order.id,
             "transaction_id": transaction.transaction_id,
             "status": transaction.status,
-            "payment_type": transaction.payment_type, # Ambil dari transaction model
+            "payment_type": transaction.payment_type,
             "transaction_time": transaction.transaction_time,
             "gross_amount": transaction.gross_amount,
             "payment_time": transaction.payment_time,
-            "paid_by_user_id": order.paid_by_user_id,
+            "paid_by_user_id": order.paid_by_user_id, # Ini akan menjadi None jika gagal dan direset
             "paid_by_user_name": paid_by_user.name if paid_by_user else None
         }
     
@@ -642,6 +673,7 @@ class PaymentService:
                 transaction.status = StatusType.SUCCESS
                 transaction.payment_time = datetime.now()
                 order.status = OrderStatus.COMPLETED
+                order.paid_at = datetime.utcnow()
                 
                 # Create notifications based on payment type
                 if is_pay_for_others and payer_user and order.paid_by_user_id != order.user_id:
@@ -756,13 +788,49 @@ class PaymentService:
                 order.payment_note = f"{existing_note}\nPayment Details: {payment_details_json}" if existing_note else f"Payment Details: {payment_details_json}"
             
             db.commit()
+            db.refresh(order)
+            db.refresh(transaction)
+            
             logger.info(f"Successfully processed notification for order {original_order_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error processing payment notification: {str(e)}")
             raise
+    
 
+    def get_transaction_details(self, db: Session, order_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+        transaction = db.query(TransactionModel).filter(
+            TransactionModel.order_id == order_id,
+        ).order_by(TransactionModel.created_at.desc()).first()
 
+        if not transaction:
+            return None
+
+        order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
+        if not order or (order.user_id != user_id and order.paid_by_user_id != user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this transaction.")
+
+        # Return a dictionary with all necessary details
+        return {
+            "id": transaction.id,
+            "transaction_id": transaction.transaction_id,
+            "gross_amount": transaction.gross_amount,
+            "status": transaction.status.value, 
+            "payment_time": transaction.payment_time.isoformat() if transaction.payment_time else None,
+            "expiry_time": transaction.expiry_time.isoformat() if transaction.expiry_time else None,
+            "transaction_time": transaction.transaction_time.isoformat() if transaction.transaction_time else None,
+            "payment_type": transaction.payment_type,
+            "qr_code_url": transaction.qr_code_url,
+            "deeplink_url": transaction.deeplink_url,
+            "order_id": str(order.id),
+            "order_number": order.order_id,
+            "order_total_price": order.total_price,
+            "user_name": order.user.name,
+            "user_email": order.user.email,
+            "paid_by_user_id": str(order.paid_by_user_id) if order.paid_by_user_id else None,
+            "paid_by_user_name": order.paid_by_user.name if order.paid_by_user else None,
+        }
+        
 # Create singleton instance
 payment_service = PaymentService()
