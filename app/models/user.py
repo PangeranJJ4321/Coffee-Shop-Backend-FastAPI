@@ -1,3 +1,4 @@
+# app/models/user.py - (Hanya untuk konfirmasi, tidak ada perubahan kode di sini)
 import enum
 from datetime import datetime
 from sqlalchemy import Column, String, ForeignKey, Enum, Boolean, DateTime
@@ -8,7 +9,7 @@ from app.models.base import BaseModel
 
 class Role(enum.Enum):
     ADMIN = "ADMIN"
-    USER = "USER" 
+    USER = "USER"
     GUEST = "GUEST"
 
 class RoleModel(BaseModel):
@@ -36,6 +37,9 @@ class UserModel(BaseModel):
     verification_token = Column(String, nullable=True)
     verification_token_expires = Column(DateTime, nullable=True)
     last_login = Column(DateTime, nullable=True)
+
+    reset_token = Column(String, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
 
     # Foreign keys
     role_id = Column(UUID(as_uuid=True), ForeignKey("roles.id"), nullable=False)

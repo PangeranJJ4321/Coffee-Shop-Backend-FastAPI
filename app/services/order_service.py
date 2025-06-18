@@ -1,6 +1,4 @@
-"""
-Order service for managing coffee orders - Enhanced with pay for others functionality
-"""
+# app/services/order_service.py - DIREVISI
 import uuid
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
@@ -41,6 +39,14 @@ class OrderService:
                 variant = db.query(VariantModel).filter_by(id=variant_data.variant_id).first()
                 if not variant or not variant.is_available:
                     raise ValueError(f"Variant with ID {variant_data.variant_id} not available")
+                
+                # Cek apakah varian ini terhubung dengan kopi
+                # Ini penting untuk mencegah user memilih varian yang tidak valid untuk kopi tsb
+                coffee_variant = db.query(CoffeeMenuModel).join(CoffeeMenuModel.coffee_variants)\
+                                .filter(CoffeeMenuModel.id == coffee.id, CoffeeVariantModel.variant_id == variant.id).first()
+                if not coffee_variant:
+                    raise ValueError(f"Variant {variant.name} is not available for coffee {coffee.name}")
+
                 item_price += variant.additional_price
                 variants_data.append(variant_data)
             
@@ -62,12 +68,12 @@ class OrderService:
             total_price=total_price,
             status=OrderStatus.PENDING,
             ordered_at=datetime.utcnow(),
-            # booking_id=order_data.booking_id
+            # booking_id=order_data.booking_id # Ini harusnya di set di tempat lain jika booking_id ada
         )
         db.add(order)
-        db.flush()
-        
-        # Create order items
+        db.flush() # Flush untuk mendapatkan order.id
+
+        # Buat order items
         for item_data in order_items_data:
             order_item = OrderItemModel(
                 order_id=order.id,
@@ -76,7 +82,7 @@ class OrderService:
                 subtotal=item_data["subtotal"]
             )
             db.add(order_item)
-            db.flush()
+            db.flush() # Flush untuk mendapatkan order_item.id
             
             # Create order item variants
             for variant_data in item_data["variants"]:
@@ -89,9 +95,9 @@ class OrderService:
         if order_data.booking_id:
             booking = db.query(BookingModel).filter(BookingModel.id == order_data.booking_id).first()
             if booking:
-                booking.order_id = order.id 
+                booking.order_id = order.id
             else:
-                pass 
+                pass
         
         db.commit()
         db.refresh(order)
@@ -104,6 +110,9 @@ class OrderService:
                 OrderModel.user_id == user_id,  # Orders created by user
                 OrderModel.paid_by_user_id == user_id  # Orders paid by user
             )
+        ).options(
+            joinedload(OrderModel.user),
+            joinedload(OrderModel.paid_by_user)
         )
         
         # Apply filters
@@ -131,9 +140,8 @@ class OrderService:
         
         # Enrich with paid_by_user_name
         for order in orders:
-            if order.paid_by_user_id and order.paid_by_user_id != order.user_id:
-                paid_by_user = db.query(UserModel).filter(UserModel.id == order.paid_by_user_id).first()
-                order.paid_by_user_name = paid_by_user.name if paid_by_user else None
+            # Perlu dipastikan relasi user dan paid_by_user sudah di-load
+            pass # joinedload sudah menangani ini
         
         return orders
 
@@ -220,7 +228,10 @@ class OrderService:
                 OrderModel.paid_by_user_id == user_id  # Person paying for the order
             )
         ).options(
-            joinedload(OrderModel.order_items).joinedload(OrderItemModel.variants).joinedload(OrderItemVariantModel.variant)
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.variants).joinedload(OrderItemVariantModel.variant).joinedload(VariantModel.variant_type), # Load variant type
+            joinedload(OrderModel.user),
+            joinedload(OrderModel.paid_by_user)
         ).first()
         
         if not order:
@@ -228,21 +239,17 @@ class OrderService:
         
         # Enrich order items with coffee name and variants with names
         for item in order.order_items:
-            coffee = db.query(CoffeeMenuModel).filter(CoffeeMenuModel.id == item.coffee_id).first()
-            item.coffee_name = coffee.name if coffee else "Unknown Coffee"
+            # coffee sudah di-load dengan joinedload
+            item.coffee_name = item.coffee.name
             
             for variant_item in item.variants:
                 variant = variant_item.variant
                 variant_item.name = variant.name
-                variant_item.variant_type = db.query(VariantTypeModel).filter(
-                    VariantTypeModel.id == variant.variant_type_id
-                ).first().name
+                variant_item.variant_type = variant.variant_type.name # Akses dari relationship
                 variant_item.additional_price = variant.additional_price
         
         # Enrich with paid_by_user_name if applicable
-        if order.paid_by_user_id and order.paid_by_user_id != order.user_id:
-            paid_by_user = db.query(UserModel).filter(UserModel.id == order.paid_by_user_id).first()
-            order.paid_by_user_name = paid_by_user.name if paid_by_user else None
+        # Relasi sudah di-load
         
         return order
 
@@ -272,36 +279,53 @@ class OrderService:
     def get_order_statistics(self, db: Session, user_id: uuid.UUID):
         """Get order statistics for a user"""
         # Orders created by user
-        orders_created = db.query(func.count(OrderModel.id)).filter(
+        orders_created_query = db.query(func.count(OrderModel.id)).filter(
             OrderModel.user_id == user_id
-        ).scalar()
-        
+        )
+        orders_created = orders_created_query.scalar() or 0
+
         # Orders paid for others
-        orders_paid_for_others = db.query(func.count(OrderModel.id)).filter(
+        orders_paid_for_others_query = db.query(func.count(OrderModel.id)).filter(
             OrderModel.paid_by_user_id == user_id,
             OrderModel.user_id != user_id  # Exclude self-payments
-        ).scalar()
-        
+        )
+        orders_paid_for_others = orders_paid_for_others_query.scalar() or 0
+
         # Total amount spent (including paying for others)
-        total_spent = db.query(func.sum(OrderModel.total_price)).filter(
+        total_spent_query = db.query(func.sum(OrderModel.total_price)).filter(
             OrderModel.paid_by_user_id == user_id,
             OrderModel.status == OrderStatus.COMPLETED
-        ).scalar() or 0
-        
+        )
+        total_spent = total_spent_query.scalar() or 0
+
         # Orders paid by others for this user
-        orders_paid_by_others = db.query(func.count(OrderModel.id)).filter(
+        orders_paid_by_others_query = db.query(func.count(OrderModel.id)).filter(
             OrderModel.user_id == user_id,
             OrderModel.paid_by_user_id != user_id,
-            OrderModel.paid_by_user_id.isnot(None)
-        ).scalar()
+            OrderModel.paid_by_user_id.isnot(None),
+            OrderModel.status == OrderStatus.COMPLETED
+        )
+        orders_paid_by_others = orders_paid_by_others_query.scalar() or 0
+
+        # Rata-rata nilai pesanan (dari pesanan yang dibuat oleh user)
+        total_revenue_from_created_orders_query = db.query(func.sum(OrderModel.total_price)).filter(
+            OrderModel.user_id == user_id,
+            OrderModel.status == OrderStatus.COMPLETED
+        )
+        total_revenue_from_created_orders = total_revenue_from_created_orders_query.scalar() or 0
         
+        average_order_value = 0.0
+        if orders_created > 0: # Gunakan orders_created untuk menghitung AOV dari pesanan yang dibuat
+             average_order_value = total_revenue_from_created_orders / orders_created
+
+
         return {
             "orders_created": orders_created,
             "orders_paid_for_others": orders_paid_for_others,
             "orders_paid_by_others": orders_paid_by_others,
-            "total_spent": total_spent
+            "total_spent": total_spent,
+            "average_order_value": round(average_order_value, 2)
         }
-
 
 # Create singleton instance
 order_service = OrderService()

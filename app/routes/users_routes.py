@@ -6,6 +6,7 @@ from app.utils.security import get_current_user, get_current_admin_user
 from app.services.user_service import UserService
 from app.models.user import UserModel, Role
 from app.schemas.user_schema import (
+    UserBase,
     UserResponse, 
     UserUpdate, 
     UserProfile, 
@@ -46,7 +47,8 @@ def update_user(
         name=updated_user.name,
         email=updated_user.email,
         phone_number=updated_user.phone_number,
-        role=updated_user.role.role
+        role=updated_user.role.role,
+        is_verified=updated_user.is_verified
     )
 
 @router.get("/", response_model=List[UserResponse])
@@ -64,7 +66,8 @@ def get_users(
             name=user.name,
             email=user.email,
             phone_number=user.phone_number,
-            role=user.role.role
+            role=user.role.role,
+            is_verified=user.is_verified
         ) for user in users
     ]
 

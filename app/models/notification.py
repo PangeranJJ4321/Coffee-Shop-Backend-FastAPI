@@ -1,4 +1,7 @@
-from sqlalchemy import Column, String, Text, Integer, Boolean, ForeignKey
+# app/models/notification.py - DIREVISI BERDASARKAN FILE ANDA
+import uuid
+from datetime import datetime
+from sqlalchemy import Column, String, Text, Integer, Boolean, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -27,11 +30,11 @@ class UserFavoriteModel(BaseModel):
     
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menu.id"), nullable=False)
+    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menus.id"), nullable=False) # <--- Ubah foreign key
     
     # Relationships
     user = relationship("UserModel", back_populates="favorites")
-    coffee = relationship("CoffeeMenuModel", back_populates="favorites")
+    coffee = relationship("CoffeeMenuModel", back_populates="favorites") # Pastikan back_populates benar
     
     def __repr__(self):
         return f"<UserFavorite {self.id}>"
@@ -45,11 +48,11 @@ class RatingModel(BaseModel):
     
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menu.id"), nullable=False)
+    coffee_id = Column(UUID(as_uuid=True), ForeignKey("coffee_menus.id"), nullable=False) # <--- Ubah foreign key
     
     # Relationships
     user = relationship("UserModel", back_populates="ratings")
-    coffee = relationship("CoffeeMenuModel", back_populates="ratings")
+    coffee = relationship("CoffeeMenuModel", back_populates="ratings") # Pastikan back_populates benar
     
     def __repr__(self):
         return f"<Rating {self.id}>"

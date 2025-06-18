@@ -1,7 +1,7 @@
 """pay for others support
 
 Revision ID: 0408f529d43a
-Revises: 1f79b4d409ba
+Revises: 70bf7bc37665'
 Create Date: 2025-05-29 00:54:08.903524
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0408f529d43a'
-down_revision: Union[str, None] = '1f79b4d409ba'
+down_revision: Union[str, None] = '70bf7bc37665'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

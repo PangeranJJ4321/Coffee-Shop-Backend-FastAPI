@@ -107,7 +107,6 @@ async def get_popular_items(
     coffee_shop_id: Optional[UUID] = Query(None),
     limit: int = Query(10, le=50),
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_admin_user)
 ):
     """Get popular menu items analytics (Admin only)"""
     return admin_analytics_service.get_popular_items(

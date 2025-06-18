@@ -1,18 +1,18 @@
-"""initial migration
+"""Fix foreign keys to point to coffee_menus table
 
-Revision ID: 9789c39bbe0d
+Revision ID: f37f3180c679
 Revises: 
-Create Date: 2025-05-29 00:49:04.704736
+Create Date: 2025-06-17 21:18:24.646770
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '9789c39bbe0d'
+revision: str = 'f37f3180c679'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,12 +24,16 @@ def upgrade() -> None:
     op.create_table('coffee_shops',
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('address', sa.Text(), nullable=False),
-    sa.Column('phone_number', sa.String(), nullable=False),
+    sa.Column('phone_number', sa.String(), nullable=True),
     sa.Column('image_url', sa.String(), nullable=True),
+    sa.Column('description', sa.String(), nullable=True),
+    sa.Column('average_rating', sa.Float(), nullable=True),
+    sa.Column('total_ratings', sa.Integer(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
     )
     op.create_table('roles',
     sa.Column('role', sa.Enum('ADMIN', 'USER', 'GUEST', name='role'), nullable=False),
@@ -49,12 +53,21 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
-    op.create_table('coffee_menu',
+    op.create_table('coffee_menus',
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('price', sa.Integer(), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
     sa.Column('image_url', sa.String(), nullable=True),
     sa.Column('is_available', sa.Boolean(), nullable=False),
+    sa.Column('average_rating', sa.Float(), nullable=True),
+    sa.Column('total_ratings', sa.Integer(), nullable=True),
+    sa.Column('long_description', sa.Text(), nullable=True),
+    sa.Column('category', sa.String(), nullable=True),
+    sa.Column('tags', postgresql.ARRAY(sa.String()), nullable=True),
+    sa.Column('preparation_time', sa.String(), nullable=True),
+    sa.Column('caffeine_content', sa.String(), nullable=True),
+    sa.Column('origin', sa.String(), nullable=True),
+    sa.Column('roast_level', sa.String(), nullable=True),
     sa.Column('coffee_shop_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -62,6 +75,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['coffee_shop_id'], ['coffee_shops.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_coffee_menus_category'), 'coffee_menus', ['category'], unique=False)
     op.create_table('operating_hours',
     sa.Column('day', sa.Enum('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY', name='weekday'), nullable=False),
     sa.Column('opening_time', sa.Time(), nullable=False),
@@ -107,6 +121,8 @@ def upgrade() -> None:
     sa.Column('verification_token', sa.String(), nullable=True),
     sa.Column('verification_token_expires', sa.DateTime(), nullable=True),
     sa.Column('last_login', sa.DateTime(), nullable=True),
+    sa.Column('reset_token', sa.String(), nullable=True),
+    sa.Column('reset_token_expires', sa.DateTime(), nullable=True),
     sa.Column('role_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -133,7 +149,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menu.id'], ),
+    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menus.id'], ),
     sa.ForeignKeyConstraint(['variant_id'], ['variants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -172,7 +188,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menu.id'], ),
+    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menus.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -182,7 +198,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menu.id'], ),
+    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menus.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -211,7 +227,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menu.id'], ),
+    sa.ForeignKeyConstraint(['coffee_id'], ['coffee_menus.id'], ),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -236,6 +252,7 @@ def upgrade() -> None:
     sa.Column('payment_time', sa.DateTime(), nullable=True),
     sa.Column('expiry_time', sa.DateTime(), nullable=True),
     sa.Column('transaction_time', sa.DateTime(), nullable=False),
+    sa.Column('payment_type', sa.String(), nullable=False),
     sa.Column('order_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -320,7 +337,8 @@ def downgrade() -> None:
     op.drop_table('time_slots')
     op.drop_table('tables')
     op.drop_table('operating_hours')
-    op.drop_table('coffee_menu')
+    op.drop_index(op.f('ix_coffee_menus_category'), table_name='coffee_menus')
+    op.drop_table('coffee_menus')
     op.drop_table('variant_types')
     op.drop_table('roles')
     op.drop_table('coffee_shops')

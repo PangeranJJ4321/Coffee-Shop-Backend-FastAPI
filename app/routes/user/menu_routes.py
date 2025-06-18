@@ -22,20 +22,18 @@ router = APIRouter(prefix="/menu", tags=["Coffee Menu"])
 async def get_coffee_shop_menu(
     coffee_shop_id: UUID,
     filter_params: CoffeeFilter = Depends(),
-    db: Session = Depends(get_db),
-    current_user: Optional[UserModel] = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Get all available coffee menu items for a specific coffee shop with optional filtering"""
-    return coffee_menu_service.get_public_menu(db, coffee_shop_id, filter_params, current_user)
+    return coffee_menu_service.get_public_menu(db, coffee_shop_id, filter_params)
 
 @router.get("/coffee/{coffee_id}", response_model=CoffeeMenuDetailResponse)
 async def get_coffee_details(
     coffee_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: Optional[UserModel] = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Get detailed information about a specific coffee menu item"""
-    coffee = coffee_menu_service.get_coffee_details(db, coffee_id, current_user)
+    coffee = coffee_menu_service.get_coffee_details(db, coffee_id)
     if not coffee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
