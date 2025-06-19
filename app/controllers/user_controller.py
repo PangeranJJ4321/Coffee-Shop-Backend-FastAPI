@@ -39,3 +39,4 @@ def get_user(
         role=user.role.role,
         is_verified=user.is_verified
     )
+

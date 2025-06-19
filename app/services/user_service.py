@@ -1,13 +1,16 @@
-# app/services/user_service.py - DIREVISI
 from typing import List, Optional
 from uuid import UUID
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, func
+from sqlalchemy.orm import Session, joinedload, relationship
 from fastapi import Depends, HTTPException, status
 
 from app.core.database import get_db
+from app.models.coffee import CoffeeMenuModel
 from app.models.notification import UserFavoriteModel
+from app.models.order import OrderModel, OrderStatus
 from app.models.user import UserModel, Role
-from app.schemas.user_schema import UserUpdate, UserProfile, CoffeeMenuPublicResponse # Import CoffeeMenuPublicResponse
+from app.schemas.auth_schema import UserRegister
+from app.schemas.user_schema import UserCreate, UserUpdate, UserProfile, CoffeeMenuPublicResponse # Import CoffeeMenuPublicResponse
 from app.utils.security import get_password_hash
 from app.repositories.user_repository import UserRepository
 from app.repositories.role_repository import RoleRepository
@@ -25,7 +28,7 @@ class UserService:
         # Load relationships yang dibutuhkan oleh UserProfile
         return self.db.query(UserModel).options(
             joinedload(UserModel.role),
-            joinedload(UserModel.favorites).joinedload(UserFavoriteModel.coffee), # Load coffee details untuk favorites
+            joinedload(UserModel.favorites).joinedload(UserFavoriteModel.coffee).joinedload(CoffeeMenuModel.coffee_shop), 
             joinedload(UserModel.bookings),
             joinedload(UserModel.orders)
         ).filter(UserModel.id == user_id).first()
@@ -36,7 +39,113 @@ class UserService:
     
     def get_users(self, skip: int = 0, limit: int = 100) -> List[UserModel]:
         """Get list of users with pagination"""
-        return self.user_repository.get_all(skip, limit)
+        users_query = self.db.query(UserModel).options(joinedload(UserModel.role)).offset(skip).limit(limit)
+        users = users_query.all()
+
+        user_ids = [user.id for user in users]
+        if not user_ids: 
+            return []
+        
+        order_stats_query = self.db.query(
+            OrderModel.user_id,
+            OrderModel.paid_by_user_id,
+            func.count(OrderModel.id).label("order_count"),
+            func.sum(OrderModel.total_price).label("total_price_sum")
+        ).filter(
+            and_(
+                (OrderModel.user_id.in_(user_ids) | (OrderModel.paid_by_user_id.in_(user_ids))),
+                OrderModel.status == OrderStatus.COMPLETED 
+            )
+        ).group_by(OrderModel.user_id, OrderModel.paid_by_user_id).all()
+
+        user_stats_map = {user_id: {"total_orders_count": 0, "total_spent_amount": 0} for user_id in user_ids}
+
+        for row in order_stats_query:
+            if row.user_id in user_stats_map:
+                user_stats_map[row.user_id]["total_orders_count"] += (row.order_count or 0)
+
+            if row.paid_by_user_id in user_stats_map:
+                # This counts money *spent* by the user.
+                user_stats_map[row.paid_by_user_id]["total_spent_amount"] += (row.total_price_sum or 0)
+
+        # Assign computed stats to UserModel instances (these are transient attributes for Pydantic mapping)
+        for user in users:
+            stats = user_stats_map.get(user.id, {})
+            user.total_orders_count = stats.get("total_orders_count", 0)
+            user.total_spent_amount = int(stats.get("total_spent_amount", 0)) # Pastikan integer
+            user.status = 'ACTIVE' if user.is_active else 'INACTIVE'
+
+            if hasattr(user.role, 'role'):
+                # Jika role adalah object dengan attribute role
+                user.role_value = user.role.role
+            else:
+                # Jika role sudah berupa enum
+                user.role_value = user.role
+         
+
+        return users
+
+
+    def create_user(self, user_create: UserCreate) -> UserModel:
+        """Create a new user"""
+        if self.user_repository.get_by_email(user_create.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+
+        role_obj = self.role_repository.get_by_role(user_create.role.value)
+        if not role_obj:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Role '{user_create.role.value}' not found."
+            )
+
+        hashed_password = get_password_hash(user_create.password)
+
+        new_user = UserModel(
+            name=user_create.name,
+            email=user_create.email,
+            phone_number=user_create.phone_number,
+            password_hash=hashed_password,
+            role_id=role_obj.id,
+            is_verified=False, 
+            is_active=True 
+        )
+        return self.user_repository.create(new_user)
+    
+    def update_user_by_admin(self, user_id: UUID, user_data: UserUpdate) -> UserModel:
+        """Update user details by admin"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with id {user_id} not found"
+            )
+
+        update_data = user_data.model_dump(exclude_unset=True)
+
+        if "password" in update_data and update_data["password"]:
+            user.password_hash = get_password_hash(update_data["password"])
+        
+        if "role" in update_data and update_data["role"]:
+            new_role_obj = self.role_repository.get_by_role(update_data["role"].value)
+            if not new_role_obj:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found.")
+            user.role_id = new_role_obj.id
+
+        if "status" in update_data: 
+            user.is_active = update_data["status"]
+
+        if "name" in update_data: user.name = update_data["name"]
+        if "email" in update_data: user.email = update_data["email"]
+        if "phone_number" in update_data: user.phone_number = update_data["phone_number"]
+
+
+        self.db.commit()
+        self.db.refresh(user) # Refresh user to get updated data, including role relationship
+        return user
+
     
     def update_user(self, user_id: UUID, user_data: UserUpdate, current_user: UserModel) -> UserModel:
         """Update user details"""
@@ -104,6 +213,10 @@ class UserService:
             phone_number=user.phone_number,
             role=user.role.role,
             is_verified=user.is_verified, # Pastikan ini ada
+            is_active=user.is_active, 
+            created_at=user.created_at, 
+            updated_at=user.updated_at, 
+            last_login=user.last_login, 
             
             favorites=user_favorites_mapped, # Gunakan data favorit yang sudah di-map
             bookings_count=len(user.bookings),
@@ -138,3 +251,13 @@ class UserService:
             )
         
         return self.user_repository.set_user_role(user, role)
+    
+    def delete_user(self, user_id: UUID) -> None:
+        """Delete a user by admin"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with id {user_id} not found"
+            )
+        self.user_repository.delete(user)

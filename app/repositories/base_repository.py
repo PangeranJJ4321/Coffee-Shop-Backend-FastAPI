@@ -32,16 +32,10 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     
     def create(self, obj_in: Union[CreateSchemaType, Dict[str, Any]]) -> ModelType:
         """Create new entity"""
-        if isinstance(obj_in, dict):
-            obj_data = obj_in
-        else:
-            obj_data = obj_in.dict(exclude_unset=True)
-            
-        db_obj = self.model(**obj_data)
-        self.db.add(db_obj)
+        self.db.add(obj_in) # Langsung tambahkan objek model SQLAlchemy ke session
         self.db.commit()
-        self.db.refresh(db_obj)
-        return db_obj
+        self.db.refresh(obj_in) # Refresh untuk mendapatkan ID atau nilai default lainnya
+        return obj_in
     
     def update(self, db_obj: ModelType, obj_in: Union[UpdateSchemaType, Dict[str, Any]]) -> ModelType:
         """Update entity"""
