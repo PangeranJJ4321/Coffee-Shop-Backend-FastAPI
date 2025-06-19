@@ -28,5 +28,5 @@ class UserController:
     def update_user_by_admin(self, user_id: UUID, user_data: UserUpdate) -> UserResponse:
         return self.service.update_user_by_admin(user_id, user_data) # Teruskan db
 
-    def delete_user(self, user_id: UUID) -> None:
-        self.service.delete_user(user_id, self.service.db) 
+    def delete_user(self, user_id: str) -> None:
+        self.service.delete_user(user_id) 

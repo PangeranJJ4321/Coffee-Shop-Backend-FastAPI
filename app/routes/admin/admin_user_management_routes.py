@@ -48,5 +48,5 @@ def delete_user_admin(
     current_user: UserModel = Depends(get_current_admin_user)
 ):
     controller = UserController(db)
-    controller.delete_user(user_id)
+    controller.delete_user(str(user_id))
     return None # No content for 204

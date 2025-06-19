@@ -68,7 +68,7 @@ class NotificationService:
 
         # Get admin who changed the status
         admin = db.query(UserModel).filter(UserModel.id == changed_by_user_id).first()
-        admin_name = admin.full_name if admin else "Admin"
+        admin_name = admin.name if admin else "Admin"
 
         # Prepare email content based on status
         status_messages = {
@@ -166,7 +166,7 @@ class NotificationService:
             title=status_info["title"],
             message=status_info["message"],
             color=status_info["color"],
-            customer_name=customer.full_name,
+            customer_name=customer.name,
             order_id=order.order_id,
             status=new_status.value.title(),
             total_price=order.total_price,
@@ -178,7 +178,7 @@ class NotificationService:
 
         return await self.send_email(
             to_email=customer.email,
-            to_name=customer.full_name,
+            to_name=customer.name,
             subject=status_info["subject"],
             html_content=html_content
         )
@@ -197,7 +197,7 @@ class NotificationService:
 
         # Get admin who changed the status
         admin = db.query(UserModel).filter(UserModel.id == changed_by_user_id).first()
-        admin_name = admin.full_name if admin else "Admin"
+        admin_name = admin.name if admin else "System"
 
         # Prepare email content based on status
         status_messages = {
@@ -295,7 +295,7 @@ class NotificationService:
             title=status_info["title"],
             message=status_info["message"],
             color=status_info["color"],
-            customer_name=customer.full_name,
+            customer_name=customer.name,
             booking_id=booking.booking_id,
             status=new_status.value.title(),
             booking_date=booking.booking_date.strftime("%B %d, %Y at %I:%M %p"),
@@ -309,7 +309,7 @@ class NotificationService:
 
         return await self.send_email(
             to_email=customer.email,
-            to_name=customer.full_name,
+            to_name=customer.name,
             subject=status_info["subject"],
             html_content=html_content
         )

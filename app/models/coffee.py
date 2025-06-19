@@ -40,8 +40,8 @@ class CoffeeMenuModel(BaseModel):
     is_available = Column(Boolean, default=True, nullable=False)
     
     # Field rating agregat (diperbarui oleh rating service)
-    average_rating = Column(Float, default=0.0) # <--- TAMBAH KOLOM INI
-    total_ratings = Column(Integer, default=0) # <--- TAMBAH KOLOM INI
+    average_rating = Column(Float, default=0.0) 
+    total_ratings = Column(Integer, default=0) 
 
     # Kolom baru yang diminta frontend
     long_description = Column(Text, nullable=True) # Deskripsi lebih panjang
@@ -50,18 +50,17 @@ class CoffeeMenuModel(BaseModel):
     preparation_time = Column(String, nullable=True) # Waktu persiapan (e.g., '3-5 menit')
     caffeine_content = Column(String, nullable=True) # Kandungan kafein (e.g., 'Tinggi', 'Rendah')
     origin = Column(String, nullable=True) # Asal biji kopi (e.g., 'Jawa Barat')
-    roast_level = Column(String, nullable=True) # Tingkat roasting (e.g., 'Medium Dark')
+    roast_level = Column(String, nullable=True) 
     featured = Column(Boolean, default=False, nullable=False) # Menandai
     # Foreign keys
     coffee_shop_id = Column(UUID(as_uuid=True), ForeignKey("coffee_shops.id"), nullable=False)
     
     # Relationships
-    # Sesuaikan back_populates dengan nama relationship di CoffeeShopModel
     coffee_shop = relationship("CoffeeShopModel", back_populates="coffee_menus") 
     coffee_variants = relationship("CoffeeVariantModel", back_populates="coffee")
     order_items = relationship("OrderItemModel", back_populates="coffee")
     favorites = relationship("UserFavoriteModel", back_populates="coffee")
-    ratings = relationship("RatingModel", back_populates="coffee") # Memastikan back_populates ke RatingModel
+    ratings = relationship("RatingModel", back_populates="coffee") 
     
     def __repr__(self):
         return f"<CoffeeMenu {self.name}>"

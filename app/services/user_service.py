@@ -109,7 +109,7 @@ class UserService:
             phone_number=user_create.phone_number,
             password_hash=hashed_password,
             role_id=role_obj.id,
-            is_verified=False, 
+            is_verified=True, # harusnya False Verify email dulu di email user.
             is_active=True 
         )
         return self.user_repository.create(new_user)
@@ -253,11 +253,4 @@ class UserService:
         return self.user_repository.set_user_role(user, role)
     
     def delete_user(self, user_id: UUID) -> None:
-        """Delete a user by admin"""
-        user = self.get_user_by_id(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with id {user_id} not found"
-            )
-        self.user_repository.delete(user)
+        self.user_repository.delete(user_id)
