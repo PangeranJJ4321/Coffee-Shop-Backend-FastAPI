@@ -6,7 +6,7 @@ import os
 from typing import List, Optional, Dict
 from uuid import UUID
 from sqlalchemy import func, cast, Float, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, status, UploadFile
 import re
 
@@ -61,12 +61,22 @@ class CoffeeMenuService:
 
     def get_coffee_menu(self, coffee_shop_id: Optional[UUID] = None, skip: int = 0, limit: int = 100) -> List[CoffeeMenuModel]:
         """Get coffee menu items with optional filtering by coffee shop"""
-        query = self.db.query(CoffeeMenuModel)
+        query = self.db.query(CoffeeMenuModel).options(
+            joinedload(CoffeeMenuModel.coffee_shop) 
+        )
 
         if coffee_shop_id:
             query = query.filter(CoffeeMenuModel.coffee_shop_id == coffee_shop_id)
 
-        return query.offset(skip).limit(limit).all()
+        coffee_menus = query.offset(skip).limit(limit).all()
+
+        for menu_item in coffee_menus:
+            if menu_item.coffee_shop:
+                menu_item.coffee_shop_name = menu_item.coffee_shop.name
+            else:
+                menu_item.coffee_shop_name = "Unknown" 
+
+        return coffee_menus
 
     def get_coffee_menu_by_id(self, coffee_id: UUID) -> CoffeeMenuModel:
         """Get a coffee menu item by ID"""
@@ -83,8 +93,11 @@ class CoffeeMenuService:
         coffee = self.get_coffee_menu_by_id(coffee_id)
 
         old_image_url = coffee.image_url # Store the old image URL
-
+        # print(f"coffee_menu.featured from payload: {coffee_menu.featured}")
         update_data = coffee_menu.dict(exclude_unset=True)
+        # print(f"update_data after dict(exclude_unset=True): {update_data}")
+
+        # update_data = coffee_menu.dict(exclude_unset=True)
 
         if image_file:
             # Upload new image to Supabase Storage

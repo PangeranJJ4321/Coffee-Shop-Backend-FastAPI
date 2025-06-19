@@ -34,6 +34,7 @@ class CoffeeMenuUpdate(BaseModel):
     is_available: Optional[bool] = None
     coffee_shop_id: Optional[UUID] = None # Allowing to change coffee shop if needed
 
+    featured: Optional[bool] = None
     long_description: Optional[str] = None
     category: Optional[str] = None
     tags: Optional[List[str]] = None
@@ -46,7 +47,9 @@ class CoffeeMenuResponse(CoffeeMenuBase):
     """Schema for coffee menu item response"""
     id: UUID
     coffee_shop_id: UUID
+    featured: bool
     average_rating: Optional[float] = None 
+    coffee_shop_name: Optional[str] = None
     total_ratings: int = 0               
     created_at: datetime
     updated_at: datetime

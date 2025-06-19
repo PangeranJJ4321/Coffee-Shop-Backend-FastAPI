@@ -60,6 +60,7 @@ async def update_coffee_menu( # Make async
     name: Optional[str] = Form(None),
     price: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
+    featured: bool = Form(...),
     image_url: Optional[str] = Form(None), # Allow updating by URL directly or setting to None
     is_available: Optional[bool] = Form(None),
     coffee_shop_id: Optional[UUID] = Form(None),
@@ -73,6 +74,7 @@ async def update_coffee_menu( # Make async
         price=price,
         description=description,
         image_url=image_url, 
+        featured=featured,
         is_available=is_available,
         coffee_shop_id=coffee_shop_id
     )

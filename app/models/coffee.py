@@ -51,7 +51,7 @@ class CoffeeMenuModel(BaseModel):
     caffeine_content = Column(String, nullable=True) # Kandungan kafein (e.g., 'Tinggi', 'Rendah')
     origin = Column(String, nullable=True) # Asal biji kopi (e.g., 'Jawa Barat')
     roast_level = Column(String, nullable=True) # Tingkat roasting (e.g., 'Medium Dark')
-
+    featured = Column(Boolean, default=False, nullable=False) # Menandai
     # Foreign keys
     coffee_shop_id = Column(UUID(as_uuid=True), ForeignKey("coffee_shops.id"), nullable=False)
     
