@@ -7,10 +7,14 @@ from app.models.base import BaseModel
 
 class OrderStatus(enum.Enum):
     """Order status enum"""
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED" 
-    CANCELLED = "CANCELLED"
+    PENDING = "PENDING"          
+    PROCESSING = "PROCESSING"    
+    CONFIRMED = "CONFIRMED"      
+    PREPARING = "PREPARING"      
+    READY = "READY"             
+    DELIVERED = "DELIVERED"      
+    COMPLETED = "COMPLETED"     
+    CANCELLED = "CANCELLED"  
 
 class StatusType(enum.Enum):
     """General status type for payments and transactions"""

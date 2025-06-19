@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.models.order import OrderModel, OrderStatus, TransactionModel, StatusType
+from app.models.order_status_history import OrderStatusHistoryModel
 from app.models.user import UserModel
 from app.models.notification import NotificationModel
 from app.schemas.payment_schema import (
@@ -445,62 +446,54 @@ class PaymentService:
         return PaymentResponse(**response_data)
     
     def check_payment_status(self, db: Session, order_id: uuid.UUID, user_id: uuid.UUID):
-        """Check the status of a payment for an order"""
-        # Get the order - allow checking if user is owner OR payer
+        """Check the status of a payment for an order and update history"""
         order = db.query(OrderModel).filter(
             OrderModel.id == order_id
         ).filter(
             (OrderModel.user_id == user_id) | (OrderModel.paid_by_user_id == user_id)
         ).first()
-        
+
         if not order:
             return None
-        
-        # Get the latest transaction for this order
+
         transaction = db.query(TransactionModel).filter(
             TransactionModel.order_id == order.id
         ).order_by(TransactionModel.created_at.desc()).first()
-        
+
         if not transaction:
             return None
-        
-        # Get paid by user info (untuk pesan notifikasi)
-        # Ambil paid_by_user_id saat ini sebelum diubah jika statusnya gagal/kadaluarsa
-        current_payer_user_id = order.paid_by_user_id
+
         paid_by_user = None
-        if current_payer_user_id: # Gunakan current_payer_user_id
+        if order.paid_by_user_id:
             paid_by_user = db.query(UserModel).filter(
-                UserModel.id == current_payer_user_id
+                UserModel.id == order.paid_by_user_id
             ).first()
-        
-        # If the transaction is not in a final state, check with Midtrans
+
+        old_order_status = order.status # Capture old status before change
+
         if transaction.status == StatusType.PENDING:
             try:
-                # For pay-for-others transactions, we need to use the modified order_id
                 check_order_id = order.order_id
-                if current_payer_user_id and current_payer_user_id != order.user_id: # Gunakan current_payer_user_id
-                    check_order_id = f"{order.order_id}-PFO-{current_payer_user_id.hex[:8]}" # Gunakan current_payer_user_id
-                
+                if order.paid_by_user_id and order.paid_by_user_id != order.user_id:
+                    check_order_id = f"{order.order_id}-PFO-{order.paid_by_user_id.hex[:8]}"
+
                 endpoint = f"{self.api_base_url}/v2/{check_order_id}/status"
                 headers = self._get_auth_header()
-                
+
                 response = requests.get(endpoint, headers=headers)
                 response.raise_for_status()
-                
+
                 payment_data = response.json()
                 logger.info(f"Payment status check: {payment_data}")
-                
-                # Update transaction status based on Midtrans response
+
                 if payment_data.get("transaction_status") == "settlement":
                     transaction.status = StatusType.SUCCESS
                     transaction.payment_time = datetime.now()
-                    order.status = OrderStatus.COMPLETED
+                    order.status = OrderStatus.CONFIRMED # Status baru: CONFIRMED
                     order.paid_at = datetime.utcnow()
-                    
+
                     # Create notifications for successful payment
-                    # Pastikan paid_by_user_id tidak None sebelum digunakan untuk notifikasi
-                    if current_payer_user_id and current_payer_user_id != order.user_id: # Gunakan current_payer_user_id
-                        # Pay for others scenario - notify both users
+                    if order.paid_by_user_id != order.user_id:
                         notification_original = NotificationModel(
                             type="payment_success",
                             message=f"Your order {order.order_id} has been paid successfully by {paid_by_user.name if paid_by_user else 'someone'}.",
@@ -508,16 +501,15 @@ class PaymentService:
                             user_id=order.user_id
                         )
                         db.add(notification_original)
-                        
+
                         notification_payer = NotificationModel(
                             type="payment_success",
                             message=f"Payment for order {order.order_id} (for {order.user.name}) has been completed successfully.",
                             is_read=False,
-                            user_id=current_payer_user_id # <--- FIX: Gunakan variabel sementara
+                            user_id=order.paid_by_user_id
                         )
                         db.add(notification_payer)
                     else:
-                        # Regular payment (owner pays for self)
                         notification = NotificationModel(
                             type="payment_success",
                             message=f"Payment for order {order.order_id} has been completed successfully.",
@@ -525,19 +517,15 @@ class PaymentService:
                             user_id=order.user_id
                         )
                         db.add(notification)
-                    
+
                 elif payment_data.get("transaction_status") in ["expire", "cancel", "deny"]:
                     transaction.status = StatusType.FAILED
-                    order.status = OrderStatus.CANCELLED
-                    
-                    # *** PENTING: Simpan ID pembayar SEBELUM meresetnya ***
-                    user_who_was_paying_id = order.paid_by_user_id 
-                    order.paid_by_user_id = None  # Reset the payer di order model
-                    
+                    order.status = OrderStatus.CANCELLED # Status baru: CANCELLED
+                    user_who_was_paying_id = order.paid_by_user_id
+                    order.paid_by_user_id = None
+
                     # Create notifications for failed payment
-                    # Gunakan user_who_was_paying_id untuk notifikasi pembayar
-                    if user_who_was_paying_id and user_who_was_paying_id != order.user_id: # <--- FIX: Gunakan variabel sementara
-                        # Pay for others scenario
+                    if user_who_was_paying_id and user_who_was_paying_id != order.user_id:
                         notification_original = NotificationModel(
                             type="payment_failed",
                             message=f"Payment for your order {order.order_id} has failed or been cancelled. The order is now available for payment again.",
@@ -545,16 +533,15 @@ class PaymentService:
                             user_id=order.user_id
                         )
                         db.add(notification_original)
-                        
+
                         notification_payer = NotificationModel(
                             type="payment_failed",
                             message=f"Payment for order {order.order_id} (for {order.user.name}) has failed or been cancelled.",
                             is_read=False,
-                            user_id=user_who_was_paying_id # <--- FIX: Gunakan variabel sementara
+                            user_id=user_who_was_paying_id
                         )
                         db.add(notification_payer)
                     else:
-                        # Regular payment (owner pays for self) atau skenario lain
                         notification = NotificationModel(
                             type="payment_failed",
                             message=f"Payment for order {order.order_id} has failed or been cancelled.",
@@ -562,22 +549,33 @@ class PaymentService:
                             user_id=order.user_id
                         )
                         db.add(notification)
-                
+
+                # --- ADD HISTORY RECORD FOR THIS STATUS CHANGE ---
+                if old_order_status != order.status:
+                    status_history_entry = OrderStatusHistoryModel(
+                        order_id=order.id,
+                        old_status=old_order_status,
+                        new_status=order.status,
+                        changed_by_user_id=user_id, # User who initiated check (or system)
+                        notes=f"Status updated via payment check. Midtrans: {payment_data.get('transaction_status')}",
+                        changed_at=datetime.utcnow()
+                    )
+                    db.add(status_history_entry)
+                # --- END ADD HISTORY ---
+
                 db.commit()
                 db.refresh(transaction)
-                db.refresh(order)
-                
+                db.refresh(order) # Refresh order to ensure history is loaded
+
             except requests.exceptions.RequestException as e:
                 logger.error(f"Error checking payment status: {str(e)}")
-                # In case of API error, return current status from DB
-                db.rollback() # Disarankan untuk rollback jika terjadi exception sebelum commit
+                db.rollback()
                 pass
-            except Exception as e: # Tangani exception lain yang mungkin terjadi saat membuat notifikasi atau lainnya
+            except Exception as e:
                 logger.error(f"Error processing payment status update for order {order_id}: {str(e)}")
                 db.rollback()
                 pass
-        
-        # Return payment status information
+
         return {
             "order_id": order.id,
             "transaction_id": transaction.transaction_id,
@@ -586,9 +584,9 @@ class PaymentService:
             "transaction_time": transaction.transaction_time,
             "gross_amount": transaction.gross_amount,
             "payment_time": transaction.payment_time,
-            "paid_by_user_id": order.paid_by_user_id, # Ini akan menjadi None jika gagal dan direset
-            "paid_by_user_name": paid_by_user.name if paid_by_user else None
-        }
+            "paid_by_user_id": order.paid_by_user_id,
+            "paid_by_user_name": paid_by_user.name if paid_by_user else None,
+        } 
     
     def _verify_notification_signature(self, notification: Dict[str, Any]) -> bool:
         """
@@ -614,70 +612,61 @@ class PaymentService:
     def process_notification(self, db: Session, notification: Dict[str, Any]):
         """
         Process payment notification webhook from Midtrans
-        Enhanced to handle pay-for-others transactions
+        Enhanced to handle pay-for-others transactions and update history
         """
         try:
-            # Log the incoming notification
             logger.info(f"Received payment notification: {notification}")
-            
-            # Verify the notification signature in production
+
             if not settings.MIDTRANS_SANDBOX:
                 is_valid_signature = self._verify_notification_signature(notification)
                 if not is_valid_signature:
                     logger.warning("Invalid notification signature received")
                     raise ValueError("Invalid signature")
-            
-            # Extract order ID from notification
+
             order_id = notification.get("order_id")
             if not order_id:
                 raise ValueError("Missing order_id in notification")
-            
-            # Handle pay-for-others order IDs (format: ORD-XXX-PFO-XXXX)
+
             original_order_id = order_id
             is_pay_for_others = "-PFO-" in order_id
             if is_pay_for_others:
                 original_order_id = order_id.split("-PFO-")[0]
-            
-            # Get the order from database
+
             order = db.query(OrderModel).filter(
                 OrderModel.order_id == original_order_id
             ).first()
-            
+
             if not order:
                 logger.error(f"Order with ID {original_order_id} not found")
                 raise ValueError(f"Order with ID {original_order_id} not found")
-            
-            # Get associated transaction
+
             transaction = db.query(TransactionModel).filter(
                 TransactionModel.order_id == order.id
             ).order_by(TransactionModel.created_at.desc()).first()
-            
+
             if not transaction:
                 logger.error(f"No transaction found for order {original_order_id}")
                 raise ValueError(f"No transaction found for order {original_order_id}")
-            
-            # Update transaction and order status based on notification
+
             transaction_status = notification.get("transaction_status")
             logger.info(f"Processing transaction status: {transaction_status} for order {original_order_id}")
-            
-            # Get payer user info for notifications
+
             payer_user = None
             if order.paid_by_user_id:
                 payer_user = db.query(UserModel).filter(
                     UserModel.id == order.paid_by_user_id
                 ).first()
-            
-            # Handle different transaction statuses
+
+            old_order_status = order.status # Capture old status before change
+
             if transaction_status in ["settlement", "capture"]:
-                # Payment is successful and complete
                 transaction.status = StatusType.SUCCESS
                 transaction.payment_time = datetime.now()
-                order.status = OrderStatus.COMPLETED
+                order.status = OrderStatus.CONFIRMED # Set to CONFIRMED
                 order.paid_at = datetime.utcnow()
-                
-                # Create notifications based on payment type
+
+                # Create notifications
                 if is_pay_for_others and payer_user and order.paid_by_user_id != order.user_id:
-                    # Notify original order owner
                     user_notification_original = NotificationModel(
                         type="payment_success",
                         message=f"Your order {order.order_id} has been paid successfully by {payer_user.name}. Thank you!",
@@ -685,8 +674,7 @@ class PaymentService:
                         user_id=order.user_id
                     )
                     db.add(user_notification_original)
-                    
-                    # Notify the payer
+
                     user_notification_payer = NotificationModel(
                         type="payment_success",
                         message=f"Payment for order {order.order_id} (for {order.user.name}) has been completed successfully. Thank you for your kindness!",
@@ -695,7 +683,6 @@ class PaymentService:
                     )
                     db.add(user_notification_payer)
                 else:
-                    # Regular payment notification
                     user_notification = NotificationModel(
                         type="payment_success",
                         message=f"Your payment for order {order.order_id} has been completed successfully.",
@@ -703,26 +690,21 @@ class PaymentService:
                         user_id=order.user_id
                     )
                     db.add(user_notification)
-                
                 logger.info(f"Payment successful for order {original_order_id}")
-                
+
             elif transaction_status == "pending":
-                # Payment is created but not yet completed (e.g., waiting for bank transfer)
-                # Status remains PENDING in our system
                 logger.info(f"Payment pending for order {original_order_id}")
-                
+                # No change to order.status here as it should be PROCESSING from create_payment
+
             elif transaction_status in ["expire", "cancel", "deny"]:
-                # Payment failed or was cancelled
                 transaction.status = StatusType.FAILED
-                order.status = OrderStatus.CANCELLED
-                
-                # Reset the payer so order can be paid by someone else
+                order.status = OrderStatus.CANCELLED # Set to CANCELLED
+
                 paid_by_user_id = order.paid_by_user_id
                 order.paid_by_user_id = None
-                
-                # Create notifications based on payment type
+
+                # Create notifications
                 if is_pay_for_others and payer_user and paid_by_user_id != order.user_id:
-                    # Notify original order owner
                     user_notification_original = NotificationModel(
                         type="payment_failed",
                         message=f"Payment for your order {order.order_id} has failed or been cancelled. The order is now available for payment again.",
@@ -730,8 +712,7 @@ class PaymentService:
                         user_id=order.user_id
                     )
                     db.add(user_notification_original)
-                    
-                    # Notify the payer
+
                     user_notification_payer = NotificationModel(
                         type="payment_failed",
                         message=f"Payment for order {order.order_id} (for {order.user.name}) has failed or been cancelled.",
@@ -740,7 +721,6 @@ class PaymentService:
                     )
                     db.add(user_notification_payer)
                 else:
-                    # Regular payment notification
                     user_notification = NotificationModel(
                         type="payment_failed",
                         message=f"Your payment for order {order.order_id} has failed or been cancelled.",
@@ -748,57 +728,62 @@ class PaymentService:
                         user_id=order.user_id
                     )
                     db.add(user_notification)
-                
                 logger.info(f"Payment failed for order {original_order_id}: {transaction_status}")
-            
+
+            # --- ADD HISTORY RECORD FOR THIS STATUS CHANGE ---
+            if old_order_status != order.status:
+                status_history_entry = OrderStatusHistoryModel(
+                    order_id=order.id,
+                    old_status=old_order_status,
+                    new_status=order.status,
+                    changed_by_user_id=None, # Changed by system (webhook)
+                    notes=f"Status updated via Midtrans webhook: {transaction_status}.",
+                    changed_at=datetime.utcnow()
+                )
+                db.add(status_history_entry)
+            # --- END ADD HISTORY ---
+
             # Save additional payment details if available
             payment_details = {}
             payment_type = notification.get("payment_type")
             if payment_type:
                 payment_details["payment_type"] = payment_type
-                
-                # Extract payment type specific fields
+
                 if payment_type == "bank_transfer":
                     if "va_numbers" in notification:
                         payment_details["va_numbers"] = notification["va_numbers"]
                 elif payment_type == "credit_card":
                     if "masked_card" in notification:
                         payment_details["masked_card"] = notification["masked_card"]
-                elif payment_type == "gopay": # Tambahkan penanganan untuk GoPay/E-Wallet
+                elif payment_type == "gopay":
                     if "actions" in notification:
                         payment_details["actions"] = notification["actions"]
-                        # Anda juga bisa mengekstrak QR code URL di sini jika ada di notifikasi
                         for action in notification["actions"]:
                             if action.get("name") == "generate_qr_code" and action.get("url"):
                                 payment_details["qr_code_url"] = action.get("url")
                                 break
-                # Add more payment types as needed
-            
-            # Add pay-for-others info to payment details
+
             if is_pay_for_others:
                 payment_details["is_pay_for_others"] = True
                 if payer_user:
                     payment_details["paid_by_user_name"] = payer_user.name
                     payment_details["paid_by_user_email"] = payer_user.email
-            
-            # Store payment note with details
+
             if payment_details:
                 existing_note = order.payment_note or ""
                 payment_details_json = json.dumps(payment_details)
                 order.payment_note = f"{existing_note}\nPayment Details: {payment_details_json}" if existing_note else f"Payment Details: {payment_details_json}"
-            
+
             db.commit()
             db.refresh(order)
             db.refresh(transaction)
-            
+
             logger.info(f"Successfully processed notification for order {original_order_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error processing payment notification: {str(e)}")
             raise
-    
-
     def get_transaction_details(self, db: Session, order_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Dict[str, Any]]:
         transaction = db.query(TransactionModel).filter(
             TransactionModel.order_id == order_id,

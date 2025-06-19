@@ -1,14 +1,11 @@
-"""
-Service for admin order management
-"""
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, func, desc
+from sqlalchemy import and_, func, desc, asc
 
-from app.models.order import OrderModel, OrderStatus, OrderItemModel
-from app.models.coffee import CoffeeMenuModel
+from app.models.order import OrderItemVariantModel, OrderModel, OrderStatus, OrderItemModel
+from app.models.coffee import CoffeeMenuModel, VariantModel
 from app.models.order_status_history import OrderStatusHistoryModel
 from app.schemas.admin_order_schema import (
     OrderManagementResponse,
@@ -29,7 +26,7 @@ class AdminOrderService:
         """Get all orders with filtering"""
         query = db.query(OrderModel).options(
             joinedload(OrderModel.user),
-            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee).joinedload(CoffeeMenuModel.coffee_shop),
             joinedload(OrderModel.paid_by_user)
         )
         
@@ -51,15 +48,16 @@ class AdminOrderService:
             # Get coffee shop info from first order item
             coffee_shop_name = "Unknown"
             coffee_shop_id_val = None
-            if order.order_items:
+            if order.order_items and order.order_items[0].coffee and order.order_items[0].coffee.coffee_shop:
                 coffee_shop_name = order.order_items[0].coffee.coffee_shop.name
                 coffee_shop_id_val = order.order_items[0].coffee.coffee_shop_id
             
             # Create items summary
-            items_summary = ", ".join([
+            items_summary_list = [
                 f"{item.quantity}x {item.coffee.name}" 
-                for item in order.order_items[:3]  # Show first 3 items
-            ])
+                for item in order.order_items[:3] # Show first 3 items
+            ]
+            items_summary = ", ".join(items_summary_list)
             if len(order.order_items) > 3:
                 items_summary += f" (+{len(order.order_items) - 3} more)"
             
@@ -76,57 +74,97 @@ class AdminOrderService:
                 coffee_shop_name=coffee_shop_name,
                 items_count=len(order.order_items),
                 items_summary=items_summary,
-                payment_status="Paid" if order.paid_by_user_id else "Unpaid",
+                payment_status="Paid" if order.paid_by_user_id else "Unpaid", 
                 paid_by_user_id=order.paid_by_user_id,
                 paid_by_user_name=order.paid_by_user.name if order.paid_by_user else None,
-                booking_id=order.booking_id,
                 created_at=order.created_at,
-                updated_at=order.updated_at
+                updated_at=order.updated_at,
+                paid_at=order.paid_at, 
+                delivery_method=order.delivery_method, 
+                recipient_name=order.recipient_name, 
+                recipient_phone_number=order.recipient_phone_number, 
+                delivery_address=order.delivery_address, 
+                order_notes=order.order_notes 
             ))
-        
         return result
     
-    def get_order_by_id(self, db: Session, order_id: UUID):
-        """Get order by ID with all details"""
-        return db.query(OrderModel).options(
-            joinedload(OrderModel.user),
-            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee),
-            joinedload(OrderModel.paid_by_user)
-        ).filter(OrderModel.id == order_id).first()
+    def get_order_by_id(self, db: Session, order_id: UUID) -> Optional[OrderModel]:
+        """Get order by ID with all details, including nested items and variants"""
+        # Load semua relasi yang dibutuhkan oleh OrderWithItemsResponse
+        order_query = db.query(OrderModel).options(
+            joinedload(OrderModel.user), # Pastikan user dimuat
+            joinedload(OrderModel.paid_by_user), # Pastikan paid_by_user dimuat
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee).joinedload(CoffeeMenuModel.coffee_shop),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.variants).joinedload(OrderItemVariantModel.variant).joinedload(VariantModel.variant_type),
+            joinedload(OrderModel.status_history).joinedload(OrderStatusHistoryModel.changed_by_user)
+        ).filter(OrderModel.id == order_id)
+
+        order = order_query.first()
+
+        if not order:
+            return None
+        
+        # Detail User (owner)
+        order.user_name = order.user.name if order.user else "Unknown User"
+        order.user_email = order.user.email if order.user else "unknown@example.com"
+
+        # Detail Pembayar
+        order.paid_by_user_name = order.paid_by_user.name if order.paid_by_user else None
+
+        # Status Pembayaran
+        order.payment_status = "Paid" if order.paid_by_user_id else "Unpaid"
+
+        order.recipient_email = order.user.email if order.user else None
+
+         # Enrich order_items dan varian di dalamnya
+        for order_item in order.order_items:
+            if order_item.coffee:
+                order_item.coffee_name = order_item.coffee.name
+                # Attach coffee_shop_name to coffee object for nested schema if needed
+                order_item.coffee.coffee_shop_name = order_item.coffee.coffee_shop.name if order_item.coffee.coffee_shop else None
+
+            for oiv in order_item.variants:
+                if oiv.variant:
+                    oiv.name = oiv.variant.name
+                    oiv.additional_price = oiv.variant.additional_price
+                    if oiv.variant.variant_type:
+                        oiv.variant_type = oiv.variant.variant_type.name
+
+        return order
+
     
     def update_order_status(
-        self, 
-        db: Session, 
-        order_id: UUID, 
+        self,
+        db: Session,
+        order_id: UUID,
         new_status: OrderStatus,
         notes: Optional[str] = None,
         changed_by_user_id: Optional[UUID] = None
     ):
-        """Update order status and create history record"""
         order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
         if not order:
             return None
-        
+
         old_status = order.status
         order.status = new_status
         order.updated_at = datetime.utcnow()
-        
-        # TODO: Create status history record when OrderStatusHistoryModel is implemented
-        if changed_by_user_id:
-            status_history = OrderStatusHistoryModel(
-                order_id=order_id,
-                old_status=old_status,
-                new_status=new_status,
-                changed_by_user_id=changed_by_user_id,
-                notes=notes,
-                changed_at=datetime.utcnow()
-            )
-            db.add(status_history)
-        
+
+        status_history = OrderStatusHistoryModel(
+            order_id=order_id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by_user_id=changed_by_user_id,
+            notes=notes,
+            changed_at=datetime.utcnow()
+        )
+        db.add(status_history)
+
         db.commit()
         db.refresh(order)
-        
-        return order
+        db.refresh(status_history)
+
+        # Gunakan helper _convert_orders_to_response untuk konsistensi
+        return self._convert_orders_to_response([order])[0]
     
     def bulk_update_order_status(
         self,
@@ -136,101 +174,53 @@ class AdminOrderService:
         notes: Optional[str] = None,
         changed_by_user_id: Optional[UUID] = None
     ):
-        """Bulk update order statuses"""
         orders = db.query(OrderModel).filter(OrderModel.id.in_(order_ids)).all()
         updated_orders = []
-        
+
         for order in orders:
             old_status = order.status
             order.status = new_status
             order.updated_at = datetime.utcnow()
             updated_orders.append(order)
-            
-            # TODO: Create status history record for each order when model is implemented
-            if changed_by_user_id:
-                status_history = OrderStatusHistoryModel(
-                    order_id=order.id,
-                    old_status=old_status,
-                    new_status=new_status,
-                    changed_by_user_id=changed_by_user_id,
-                    notes=notes,
-                    changed_at=datetime.utcnow()
-                )
-                db.add(status_history)
-        
+
+            status_history = OrderStatusHistoryModel(
+                order_id=order.id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by_user_id=changed_by_user_id,
+                notes=notes,
+                changed_at=datetime.utcnow()
+            )
+            db.add(status_history)
+
         db.commit()
-        
-        # Return updated orders with full details (convert to OrderManagementResponse)
-        result = []
-        for order in updated_orders:
-            # Refresh order to get related data
-            db.refresh(order)
-            
-            # Get coffee shop info
-            coffee_shop_name = "Unknown"
-            coffee_shop_id_val = None
-            if order.order_items:
-                coffee_shop_name = order.order_items[0].coffee.coffee_shop.name
-                coffee_shop_id_val = order.order_items[0].coffee.coffee_shop_id
-            
-            # Create items summary
-            items_summary = ", ".join([
-                f"{item.quantity}x {item.coffee.name}" 
-                for item in order.order_items[:3]
-            ])
-            if len(order.order_items) > 3:
-                items_summary += f" (+{len(order.order_items) - 3} more)"
-            
-            result.append(OrderManagementResponse(
-                id=order.id,
-                order_id=order.order_id,
-                status=order.status,
-                total_price=order.total_price,
-                ordered_at=order.ordered_at,
-                user_id=order.user_id,
-                user_name=order.user.name,
-                user_email=order.user.email,
-                coffee_shop_id=coffee_shop_id_val,
-                coffee_shop_name=coffee_shop_name,
-                items_count=len(order.order_items),
-                items_summary=items_summary,
-                payment_status="Paid" if order.paid_by_user_id else "Unpaid",
-                paid_by_user_id=order.paid_by_user_id,
-                paid_by_user_name=order.paid_by_user.name if order.paid_by_user else None,
-                booking_id=order.booking_id,
-                created_at=order.created_at,
-                updated_at=order.updated_at
-            ))
-        
-        return result
+
+        # Gunakan helper _convert_orders_to_response untuk konsistensi
+        return self._convert_orders_to_response(updated_orders)
     
     def get_order_status_history(self, db: Session, order_id: UUID) -> List[OrderStatusHistoryResponse]:
         """Get order status change history"""
-        # TODO: This requires OrderStatusHistoryModel to be implemented
-        # When implemented, use this query:
-        # history = db.query(OrderStatusHistoryModel).options(
-        #     joinedload(OrderStatusHistoryModel.changed_by_user)
-        # ).filter(
-        #     OrderStatusHistoryModel.order_id == order_id
-        # ).order_by(desc(OrderStatusHistoryModel.changed_at)).all()
-        # 
-        # return [OrderStatusHistoryResponse(
-        #     id=h.id,
-        #     order_id=h.order_id,
-        #     old_status=h.old_status,
-        #     new_status=h.new_status,
-        #     changed_by_user_id=h.changed_by_user_id,
-        #     changed_by_user_name=h.changed_by_user.name,
-        #     notes=h.notes,
-        #     changed_at=h.changed_at
-        # ) for h in history]
-        
-        # Check if order exists first
         order = db.query(OrderModel).filter(OrderModel.id == order_id).first()
         if not order:
-            return None
-            
-        return []  # Placeholder until model is implemented
+            return None # Router akan mengubah ini menjadi 404
+
+        history_query = db.query(OrderStatusHistoryModel).options(
+            joinedload(OrderStatusHistoryModel.changed_by_user) # Load user untuk nama
+        ).filter(
+            OrderStatusHistoryModel.order_id == order_id
+        ).order_by(OrderStatusHistoryModel.changed_at.asc()).all()
+
+
+        return [OrderStatusHistoryResponse(
+            id=h.id,
+            order_id=h.order_id,
+            old_status=h.old_status,
+            new_status=h.new_status,
+            changed_by_user_id=h.changed_by_user_id,
+            changed_by_user_name=h.changed_by_user.name if h.changed_by_user else "System", 
+            notes=h.notes,
+            changed_at=h.changed_at
+        ) for h in history_query]
     
     def get_pending_orders_count(self, db: Session, coffee_shop_id: Optional[UUID] = None) -> int:
         """Get count of pending orders"""
@@ -265,12 +255,14 @@ class AdminOrderService:
         
         # Count orders by status
         status_counts = {
-            'pending': 0,
-            'confirmed': 0,
-            'preparing': 0,
-            'ready': 0,
-            'completed': 0,
-            'cancelled': 0
+            'PENDING': 0,
+            'PROCESSING': 0,
+            'CONFIRMED': 0, 
+            'PREPARING': 0, 
+            'READY': 0,     
+            'DELIVERED': 0, 
+            'COMPLETED': 0,
+            'CANCELLED': 0
         }
         
         for order in orders:
@@ -324,7 +316,11 @@ class AdminOrderService:
                 for name, quantity in top_coffee_items
             ],
             average_order_value=total_revenue / total_orders if total_orders > 0 else 0,
-            peak_hour=max(hourly_orders.items(), key=lambda x: x[1])[0] if orders else "00:00"
+            peak_hour=max(hourly_orders.items(), key=lambda x: x[1])[0] if orders else "00:00",
+            pending_orders=status_counts['PENDING'],
+            processing_orders=status_counts['PROCESSING'],
+            completed_orders=status_counts['COMPLETED'],
+            cancelled_orders=status_counts['CANCELLED']
         )
     
     def get_orders_by_date_range(
@@ -338,7 +334,7 @@ class AdminOrderService:
         """Get orders within a date range"""
         query = db.query(OrderModel).options(
             joinedload(OrderModel.user),
-            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee),
+            joinedload(OrderModel.order_items).joinedload(OrderItemModel.coffee).joinedload(CoffeeMenuModel.coffee_shop),
             joinedload(OrderModel.paid_by_user)
         ).filter(
             func.date(OrderModel.ordered_at).between(start_date, end_date)
@@ -354,28 +350,26 @@ class AdminOrderService:
         
         orders = query.order_by(desc(OrderModel.ordered_at)).all()
         
-        # Convert to response format using the same logic as get_all_orders
         return self._convert_orders_to_response(orders)
     
     def _convert_orders_to_response(self, orders: List[OrderModel]) -> List[OrderManagementResponse]:
         """Helper method to convert OrderModel list to OrderManagementResponse list"""
         result = []
         for order in orders:
-            # Get coffee shop info from first order item
             coffee_shop_name = "Unknown"
             coffee_shop_id_val = None
-            if order.order_items:
+            if order.order_items and order.order_items[0].coffee and order.order_items[0].coffee.coffee_shop:
                 coffee_shop_name = order.order_items[0].coffee.coffee_shop.name
                 coffee_shop_id_val = order.order_items[0].coffee.coffee_shop_id
-            
-            # Create items summary
-            items_summary = ", ".join([
-                f"{item.quantity}x {item.coffee.name}" 
-                for item in order.order_items[:3]  # Show first 3 items
-            ])
+
+            items_summary_list = [
+                f"{item.quantity}x {item.coffee.name}"
+                for item in order.order_items[:3]
+            ]
+            items_summary = ", ".join(items_summary_list)
             if len(order.order_items) > 3:
                 items_summary += f" (+{len(order.order_items) - 3} more)"
-            
+
             result.append(OrderManagementResponse(
                 id=order.id,
                 order_id=order.order_id,
@@ -383,8 +377,8 @@ class AdminOrderService:
                 total_price=order.total_price,
                 ordered_at=order.ordered_at,
                 user_id=order.user_id,
-                user_name=order.user.name,
-                user_email=order.user.email,
+                user_name=order.user.name if order.user else "Unknown User",
+                user_email=order.user.email if order.user else "unknown@example.com",
                 coffee_shop_id=coffee_shop_id_val,
                 coffee_shop_name=coffee_shop_name,
                 items_count=len(order.order_items),
@@ -392,11 +386,16 @@ class AdminOrderService:
                 payment_status="Paid" if order.paid_by_user_id else "Unpaid",
                 paid_by_user_id=order.paid_by_user_id,
                 paid_by_user_name=order.paid_by_user.name if order.paid_by_user else None,
-                booking_id=order.booking_id,
                 created_at=order.created_at,
-                updated_at=order.updated_at
+                updated_at=order.updated_at,
+                paid_at=order.paid_at,
+                delivery_method=order.delivery_method,
+                recipient_name=order.recipient_name,
+                recipient_phone_number=order.recipient_phone_number,
+                delivery_address=order.delivery_address,
+                order_notes=order.order_notes
             ))
-        
+
         return result
 
 # Create singleton instance

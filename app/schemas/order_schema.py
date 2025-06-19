@@ -19,6 +19,7 @@ class OrderDeliveryInfo(BaseModel):
     name: str
     phone_number: str
     address: Optional[str] = None
+    email: Optional[str] = None
     notes: Optional[str] = None
     delivery_method: str # 'delivery' or 'pickup'
 
@@ -74,43 +75,44 @@ class OrderResponse(BaseModel):
     total_price: int
     ordered_at: datetime
     payment_note: Optional[str] = None
+    
     user_id: UUID
+    user_name: Optional[str] = None 
+    user_email: Optional[str] = None 
+
     paid_by_user_id: Optional[UUID] = None
     paid_by_user_name: Optional[str] = None 
+
+    payment_status: Optional[str] = None 
+
     created_at: datetime
     updated_at: datetime
     paid_at: Optional[datetime] = None
     
+    # Atribut delivery yang di-flatten
     delivery_method: Optional[str] = None
     recipient_name: Optional[str] = None
     recipient_phone_number: Optional[str] = None
     delivery_address: Optional[str] = None
     order_notes: Optional[str] = None
 
-
-    # Gunakan computed_field untuk membuat objek delivery_info bersarang
     @computed_field
     @property
     def delivery_info(self) -> Optional[OrderDeliveryInfo]:
-        # Jika ada metode pengiriman, buat objek OrderDeliveryInfo
         if self.delivery_method:
             return OrderDeliveryInfo(
                 name=self.recipient_name,
                 phone_number=self.recipient_phone_number,
+                email=self.user_email, 
                 address=self.delivery_address,
                 notes=self.order_notes,
                 delivery_method=self.delivery_method
             )
-        return None # Jika tidak ada delivery_method, kembalikan None
-
-    class Config:
-        from_attributes = True # Pastikan ini True (untuk Pydantic v2)
-        use_enum_values = True # Untuk memastikan OrderStatus diserialisasi sebagai string
-
-
+        return None
 
     class Config:
         from_attributes = True
+        use_enum_values = True
 
 class OrderWithItemsResponse(OrderResponse):
     order_items: List[OrderItemResponse] = [] 

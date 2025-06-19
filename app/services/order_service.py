@@ -13,6 +13,7 @@ from app.models.order import (
     OrderItemVariantModel
 )
 from app.models.coffee import CoffeeMenuModel, CoffeeVariantModel, VariantModel, VariantTypeModel, CoffeeShopModel
+from app.models.order_status_history import OrderStatusHistoryModel
 from app.models.user import UserModel
 from app.schemas.order_schema import OrderCreate, OrderFilterParams
 
@@ -103,6 +104,16 @@ class OrderService:
                 booking.order_id = order.id
             else:
                 pass
+
+        initial_status_history = OrderStatusHistoryModel(
+            order_id=order.id,
+            old_status=None, 
+            new_status=OrderStatus.PENDING,
+            changed_by_user_id=user_id, 
+            notes="Order created",
+            changed_at=datetime.utcnow()
+        )
+        db.add(initial_status_history)
         
         db.commit()
         db.refresh(order)

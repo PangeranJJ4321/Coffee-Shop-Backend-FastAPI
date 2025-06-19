@@ -1,8 +1,8 @@
-"""initial migration
+"""Tambah tabel
 
-Revision ID: 6a51ebb01017
+Revision ID: e7495523c673
 Revises: 
-Create Date: 2025-06-19 18:48:04.693939
+Create Date: 2025-06-20 00:39:42.388517
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '6a51ebb01017'
+revision: str = 'e7495523c673'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -68,7 +68,7 @@ def upgrade() -> None:
     sa.Column('caffeine_content', sa.String(), nullable=True),
     sa.Column('origin', sa.String(), nullable=True),
     sa.Column('roast_level', sa.String(), nullable=True),
-    sa.Column('featured', sa.Boolean(), nullable=True),
+    sa.Column('featured', sa.Boolean(), nullable=False),
     sa.Column('coffee_shop_id', sa.UUID(), nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -167,7 +167,7 @@ def upgrade() -> None:
     )
     op.create_table('orders',
     sa.Column('order_id', sa.String(), nullable=False),
-    sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=False),
+    sa.Column('status', sa.Enum('PENDING', 'PROCESSING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=False),
     sa.Column('total_price', sa.Integer(), nullable=False),
     sa.Column('ordered_at', sa.DateTime(), nullable=False),
     sa.Column('payment_note', sa.Text(), nullable=True),
@@ -240,8 +240,8 @@ def upgrade() -> None:
     )
     op.create_table('order_status_history',
     sa.Column('order_id', sa.UUID(), nullable=False),
-    sa.Column('old_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=True),
-    sa.Column('new_status', sa.Enum('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=False),
+    sa.Column('old_status', sa.Enum('PENDING', 'PROCESSING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=True),
+    sa.Column('new_status', sa.Enum('PENDING', 'PROCESSING', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERED', 'COMPLETED', 'CANCELLED', name='orderstatus'), nullable=False),
     sa.Column('changed_by_user_id', sa.UUID(), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('changed_at', sa.DateTime(), nullable=False),

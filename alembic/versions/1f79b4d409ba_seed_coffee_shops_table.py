@@ -1,7 +1,7 @@
 """seed coffee_shops table
 
 Revision ID: 1f79b4d409ba
-Revises: 6a51ebb01017'
+Revises: e7495523c673'
 Create Date: 2025-05-29 00:52:37.306664
 
 """
@@ -14,7 +14,7 @@ import uuid # Import uuid
 
 # revision identifiers, used by Alembic.
 revision: str = '1f79b4d409ba'
-down_revision: Union[str, None] = '6a51ebb01017'
+down_revision: Union[str, None] = 'e7495523c673'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
