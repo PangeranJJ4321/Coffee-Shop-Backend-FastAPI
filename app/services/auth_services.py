@@ -33,6 +33,10 @@ class AuthService:
         if not verify_password(login_data.password, user.password_hash):
             return None
         
+        user.last_login = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(user)
+        
         # Check if user is verified
         if not user.is_verified:
             raise HTTPException(

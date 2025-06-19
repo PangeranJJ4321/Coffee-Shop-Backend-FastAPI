@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import UUID, ARRAY # Import ARRAY jika belum
 from sqlalchemy import Text, Boolean, Integer, String, Float # Import tipe data
 
 
+
 # revision identifiers, used by Alembic.
 revision: str = '10672d139a75'
 down_revision: Union[str, None] = '67a53224a564'

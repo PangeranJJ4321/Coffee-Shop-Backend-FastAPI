@@ -54,5 +54,12 @@ class UserModel(BaseModel):
     notifications = relationship("NotificationModel", back_populates="user")
     payouts = relationship("PayoutModel", back_populates="user")
     
+    @property
+    def role_enum(self) -> Role:
+        """Return role as enum value"""
+        if self.role and hasattr(self.role, 'role'):
+            return Role(self.role.role)
+        return Role.USER  # default
+    
     def __repr__(self):
         return f"<User {self.email}>"

@@ -28,3 +28,7 @@ class RoleRepository:
         if not role_obj:
             role_obj = self.create_role(role)
         return role_obj
+    
+    def get_by_role_name(self, role_name: str):
+        """Mengambil objek Role berdasarkan nama peran."""
+        return self.db.query(Role).filter(Role.role == role_name).first()
