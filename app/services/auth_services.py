@@ -36,7 +36,7 @@ class AuthService:
         user.last_login = datetime.utcnow()
         self.db.commit()
         self.db.refresh(user)
-        
+
         # Check if user is verified
         if not user.is_verified:
             raise HTTPException(
@@ -79,17 +79,17 @@ class AuthService:
             password_hash = get_password_hash(user_data.password)
             
             # Create user object
-            new_user_data = {
-                "name": user_data.name,
-                "email": user_data.email,
-                "phone_number": user_data.phone_number,
-                "password_hash": password_hash,
-                "role_id": user_role.id,
-                "is_verified": True  
-            }
+            new_user_instance = UserModel( 
+                name=user_data.name,
+                email=user_data.email,
+                phone_number=user_data.phone_number,
+                password_hash=password_hash,
+                role_id=user_role.id,
+                is_verified=True,
+            )
             
             # Create new user
-            new_user = self.user_repository.create(new_user_data)
+            new_user = self.user_repository.create(new_user_instance)
             
             # Generate verification token
             token = create_verification_token()
