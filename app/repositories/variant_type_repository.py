@@ -1,17 +1,17 @@
 from typing import List
 from uuid import UUID
+
+from pytest import Session
 from app.models.coffee import VariantTypeModel, VariantModel
 from app.schemas.coffee_schema import VariantTypeCreate, VariantTypeUpdate
 
 class VariantTypeRepository:
-    def __init__(self, db):
+    def __init__(self, db: Session):
         self.db = db
+        self.model = VariantTypeModel
     
-    def get_variant_type_by_name(self, name: str):
-        return self.db.query(VariantTypeModel).filter(VariantTypeModel.name == name).first()
-    
-    def create_variant_type(self, variant_type: VariantTypeCreate):
-        new_variant_type = VariantTypeModel(
+    def create_variant_type(self, variant_type: VariantTypeCreate) -> VariantTypeModel: # Tambahkan tipe hint
+        new_variant_type = self.model( 
             name=variant_type.name,
             description=variant_type.description,
             is_required=variant_type.is_required
@@ -20,12 +20,15 @@ class VariantTypeRepository:
         self.db.commit()
         self.db.refresh(new_variant_type)
         return new_variant_type
+
+    def get_variant_type_by_name(self, name: str):
+        return self.db.query(self.model).filter(self.model.name == name).first() # <-- Ubah ini
     
     def get_variant_types(self, skip: int = 0, limit: int = 100):
-        return self.db.query(VariantTypeModel).offset(skip).limit(limit).all()
+        return self.db.query(self.model).offset(skip).limit(limit).all() # <-- Ubah ini
     
     def get_variant_type_by_id(self, variant_type_id: UUID):
-        return self.db.query(VariantTypeModel).filter(VariantTypeModel.id == variant_type_id).first()
+        return self.db.query(self.model).filter(self.model.id == variant_type_id).first() # <-- Ubah ini
     
     def update_variant_type(self, variant_type_id: UUID, variant_type: VariantTypeUpdate):
         db_variant_type = self.get_variant_type_by_id(variant_type_id)

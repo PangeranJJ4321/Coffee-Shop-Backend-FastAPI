@@ -107,6 +107,7 @@ class VariantResponse(VariantBase):
     """Schema for variant response"""
     id: UUID
     variant_type_id: UUID
+    variant_type_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
