@@ -6,7 +6,6 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 class DashboardSummaryResponse(BaseModel):
-    """Main dashboard summary statistics"""
     total_revenue_today: int
     total_revenue_this_month: int
     total_orders_today: int
@@ -18,8 +17,12 @@ class DashboardSummaryResponse(BaseModel):
     pending_orders_count: int
     upcoming_bookings_count: int
     top_selling_item_today: Optional[str] = None
-    revenue_growth_percentage: float  # Month over month
-    order_growth_percentage: float    # Month over month
+    revenue_growth_percentage: float
+    order_growth_percentage: float
+    total_users: int 
+    users_growth: float 
+    total_menu_items: int 
+    menu_growth: float 
 
 class SalesDataPoint(BaseModel):
     date: str

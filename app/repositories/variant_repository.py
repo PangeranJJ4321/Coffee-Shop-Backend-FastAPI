@@ -1,17 +1,20 @@
 from typing import List, Optional
 from uuid import UUID
+
+from pytest import Session
 from app.models.coffee import VariantModel, VariantTypeModel, CoffeeVariantModel
 from app.schemas.coffee_schema import VariantCreate, VariantUpdate
 
 class VariantRepository:
-    def __init__(self, db):
+    def __init__(self, db: Session):
         self.db = db
+        self.model = VariantModel
     
     def get_variant_type_by_id(self, variant_type_id: UUID):
         return self.db.query(VariantTypeModel).filter(VariantTypeModel.id == variant_type_id).first()
     
-    def create_variant(self, variant: VariantCreate):
-        new_variant = VariantModel(
+    def create_variant(self, variant: VariantCreate) -> VariantModel:
+        new_variant = self.model( 
             name=variant.name,
             additional_price=variant.additional_price,
             is_available=variant.is_available,
@@ -23,14 +26,14 @@ class VariantRepository:
         return new_variant
     
     def get_variants(self, variant_type_id: Optional[UUID] = None, skip: int = 0, limit: int = 100):
-        query = self.db.query(VariantModel)
+        query = self.db.query(self.model) 
         if variant_type_id:
-            query = query.filter(VariantModel.variant_type_id == variant_type_id)
+            query = query.filter(self.model.variant_type_id == variant_type_id) # <-- Ubah ini
         return query.offset(skip).limit(limit).all()
     
     def get_variant_by_id(self, variant_id: UUID):
-        return self.db.query(VariantModel).filter(VariantModel.id == variant_id).first()
-    
+        return self.db.query(self.model).filter(self.model.id == variant_id).first() # <-- Ubah ini
+
     def update_variant(self, variant_id: UUID, variant: VariantUpdate):
         db_variant = self.get_variant_by_id(variant_id)
         

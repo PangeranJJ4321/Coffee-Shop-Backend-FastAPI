@@ -90,6 +90,11 @@ class AdminAnalyticsService:
                                                             .filter(CoffeeMenuModel.coffee_shop_id == coffee_shop_id)
         active_users_this_month = active_users_this_month.scalar() or 0
 
+        total_users_system = db.query(UserModel).count() 
+
+        # Total Menu Items (count all active coffee menu items)
+        total_menu_items = db.query(CoffeeMenuModel).filter(CoffeeMenuModel.is_available == True).count()
+
         # Pending Orders Count
         pending_orders_count = db.query(OrderModel).filter(OrderModel.status == OrderStatus.PENDING)
         if coffee_shop_id:
@@ -134,7 +139,7 @@ class AdminAnalyticsService:
         if total_revenue_last_month > 0:
             revenue_growth_percentage = ((total_revenue_this_month - total_revenue_last_month) / total_revenue_last_month) * 100
         elif total_revenue_this_month > 0:
-            revenue_growth_percentage = 100.0 # From 0 to something is 100% growth
+            revenue_growth_percentage = 100.0 
 
         # Order Growth Percentage (Month over month)
         total_orders_last_month = orders_base_query.filter(and_(
@@ -148,6 +153,8 @@ class AdminAnalyticsService:
         elif total_orders_this_month > 0:
             order_growth_percentage = 100.0
 
+        users_growth = 0.0 # Placeholder
+        menu_growth = 0.0 # Placeholder
 
         return DashboardSummaryResponse(
             total_revenue_today=total_revenue_today,
@@ -161,8 +168,13 @@ class AdminAnalyticsService:
             pending_orders_count=pending_orders_count,
             upcoming_bookings_count=upcoming_bookings_count,
             top_selling_item_today=top_selling_item_today,
-            revenue_growth_percentage=revenue_growth_percentage,
-            order_growth_percentage=order_growth_percentage,
+            revenue_growth_percentage=round(revenue_growth_percentage, 2),
+            order_growth_percentage=round(order_growth_percentage, 2),
+
+            total_users=total_users_system, 
+            users_growth=users_growth, 
+            total_menu_items=total_menu_items, 
+            menu_growth=menu_growth,
         )
 
     def get_sales_analytics(
