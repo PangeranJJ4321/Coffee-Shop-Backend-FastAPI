@@ -17,7 +17,7 @@ email_validator==2.2.0
 fastapi==0.115.12
 fastapi-cli==0.0.7
 frozenlist==1.6.0
-gotrue==2.12.0
+gotrue==1.1.1
 greenlet==3.2.2
 h11==0.16.0
 h2==4.2.0
