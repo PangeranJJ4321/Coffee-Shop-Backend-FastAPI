@@ -22,9 +22,9 @@ greenlet==3.2.2
 h11==0.16.0
 h2==4.2.0
 hpack==4.1.0
-httpcore==1.0.9
 httptools==0.6.4
-httpx==0.27.1
+httpx>=0.23,<0.25
+httpcore<1.0.0
 hyperframe==6.1.0
 idna==3.10
 iniconfig==2.1.0
