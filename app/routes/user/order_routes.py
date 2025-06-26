@@ -31,7 +31,7 @@ async def create_order(
     """Create a new coffee order"""
     return order_service.create_order(db, order_data, current_user.id)
 
-@router.get("/", response_model=List[OrderWithItemsResponse], summary="Get all orders for the current user")
+@router.get("", response_model=List[OrderWithItemsResponse], summary="Get all orders for the current user")
 async def get_user_orders(
     params: OrderFilterParams = Depends(),
     db: Session = Depends(get_db),
