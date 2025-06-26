@@ -541,6 +541,7 @@ class AdminAnalyticsService:
             avg_orders_per_user_query = avg_orders_per_user_query.join(OrderItemModel, OrderModel.id == OrderItemModel.order_id)\
                                                                 .join(CoffeeMenuModel, OrderItemModel.coffee_id == CoffeeMenuModel.id)\
                                                                 .filter(CoffeeMenuModel.coffee_shop_id == coffee_shop_id)
+            
         average_orders_per_user = round(avg_orders_per_user_query.scalar() or 0.0, 2)
 
         # Top Customers (by total spent or total orders)
